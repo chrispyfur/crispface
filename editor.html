@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editor - CrispFace</title>
+    <link rel="stylesheet" href="/crispface/css/styles.css" />
+</head>
+<body class="editor-page" data-page="editor">
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-brand" id="sidebar-brand">
+            <span id="watch-name">CrispFace</span>
+            <div class="sidebar-brand-links">
+                <a href="#" id="brand-edit">Edit</a>
+                <a href="#" id="brand-new">+ New</a>
+            </div>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="/crispface/dashboard.html">Dashboard</a></li>
+            <li><a href="/crispface/faces.html">Faces</a></li>
+            <li><a href="/crispface/complications.html">Complications</a></li>
+        </ul>
+        <div class="sidebar-user">
+            <span id="sidebar-user"></span> &middot;
+            <a href="#" id="btn-logout">Log out</a>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="editor-layout">
+            <!-- Left panel: face settings -->
+            <div class="editor-sidebar-left">
+                <h3>Face Settings</h3>
+                <div class="prop-row">
+                    <label for="face-name">Name</label>
+                    <input type="text" id="face-name" value="" />
+                </div>
+                <div class="prop-row">
+                    <label for="face-slug">Slug</label>
+                    <input type="text" id="face-slug" value="" />
+                </div>
+                <div class="prop-row">
+                    <label for="face-background">Background</label>
+                    <select id="face-background">
+                        <option value="black">Black</option>
+                        <option value="white">White</option>
+                    </select>
+                </div>
+                <div class="prop-row">
+                    <label for="face-stale">Stale (seconds)</label>
+                    <input type="number" id="face-stale" value="60" min="1" />
+                </div>
+            </div>
+
+            <!-- Center: toolbar + canvas -->
+            <div class="editor-canvas-area">
+                <div class="editor-toolbar">
+                    <select id="comp-type-select" class="toolbar-select"><option>Loading...</option></select>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-add-comp">Add</button>
+                    <button type="button" class="btn btn-danger btn-sm" id="btn-delete">Delete Selected</button>
+                    <div style="flex:1;"></div>
+                    <span id="save-status" style="font-size:13px;color:#757575;line-height:30px;"></span>
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-save">Save</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-simulate">Simulate</button>
+                </div>
+                <div class="canvas-container-wrapper">
+                    <canvas id="face-canvas" width="200" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Right panel: selected complication properties -->
+            <div class="editor-sidebar-right">
+                <h3>Properties</h3>
+                <div id="props-panel">
+                    <div class="no-selection">Select a complication to edit its properties</div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="/crispface/js/app.js"></script>
+<script src="/crispface/js/fabric.min.js"></script>
+<script src="/crispface/js/editor.js"></script>
+<script src="/crispface/js/properties.js"></script>
+</body>
+</html>

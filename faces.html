@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Faces - CrispFace</title>
+    <link rel="stylesheet" href="/crispface/css/styles.css" />
+</head>
+<body data-page="faces">
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-brand" id="sidebar-brand">
+            <span id="watch-name">CrispFace</span>
+            <div class="sidebar-brand-links">
+                <a href="#" id="brand-edit">Edit</a>
+                <a href="#" id="brand-new">+ New</a>
+            </div>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="/crispface/dashboard.html">Dashboard</a></li>
+            <li><a href="/crispface/faces.html" class="active">Faces</a></li>
+            <li><a href="/crispface/complications.html">Complications</a></li>
+        </ul>
+        <div class="sidebar-user">
+            <span id="sidebar-user"></span> &middot;
+            <a href="#" id="btn-logout">Log out</a>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Faces</h1>
+            <button type="button" class="btn btn-primary" id="btn-new-face">New Face</button>
+        </div>
+        <div id="empty-state" class="empty-state" style="display:none;">
+            <p>No faces yet. Create your first watch face to get started.</p>
+        </div>
+        <div id="face-grid" class="face-grid"></div>
+    </main>
+</div>
+<script src="/crispface/js/app.js"></script>
+</body>
+</html>
