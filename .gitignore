@@ -1,0 +1,5 @@
+__pycache__/
+data/cache/
+data/users/
+data/users.json
+data/weather_cache.json

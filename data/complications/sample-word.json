@@ -1,0 +1,9 @@
+{
+    "id": "sample-word",
+    "name": "Sample Word",
+    "description": "Returns a random word from a built-in list. Useful for testing text complications.",
+    "script": "sample_word.py",
+    "variables": [],
+    "created_at": "2026-02-12T00:00:00+00:00",
+    "updated_at": "2026-02-12T22:34:36.626475+00:00"
+}

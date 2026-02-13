@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Complications - CrispFace</title>
+    <link rel="stylesheet" href="/crispface/css/styles.css" />
+</head>
+<body data-page="complications">
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-brand" id="sidebar-brand">
+            <span id="watch-name">CrispFace</span>
+            <div class="sidebar-brand-links">
+                <a href="#" id="brand-edit">Edit</a>
+                <a href="#" id="brand-new">+ New</a>
+            </div>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="/crispface/dashboard.html">Dashboard</a></li>
+            <li><a href="/crispface/faces.html">Faces</a></li>
+            <li><a href="/crispface/complications.html" class="active">Complications</a></li>
+        </ul>
+        <div class="sidebar-user">
+            <span id="sidebar-user"></span> &middot;
+            <a href="#" id="btn-logout">Log out</a>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Complications</h1>
+            <button type="button" class="btn btn-primary" id="btn-new-type">New Type</button>
+        </div>
+        <div id="empty-state" class="empty-state" style="display:none;">
+            <p>No complication types yet. Create one to get started.</p>
+        </div>
+        <div id="type-grid" class="face-grid"></div>
+    </main>
+</div>
+<script src="/crispface/js/app.js"></script>
+</body>
+</html>
