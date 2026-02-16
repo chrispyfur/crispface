@@ -429,7 +429,7 @@
             complication_type: data.complication_type || '',
             type: 'text',
             h: compH,
-            stale_seconds: data.stale_seconds || 1,
+            stale_seconds: (data.params && data.params.refresh) ? parseInt(data.params.refresh, 10) || 1 : (data.stale_seconds || 1),
             stale_enabled: data.stale_enabled !== false,
             source: content.source || '',
             params: data.params || {},

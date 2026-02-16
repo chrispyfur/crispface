@@ -324,6 +324,10 @@
                         }
                         var val = isCheckbox ? (input.checked ? 'true' : 'false') : input.value;
                         currentObject.crispfaceData.params[varName] = val;
+                        // Sync refresh variable to stale_seconds
+                        if (varName === 'refresh') {
+                            currentObject.crispfaceData.stale_seconds = parseInt(val, 10) || 1;
+                        }
                         // For "text" type, the text variable IS the display value
                         if (compTypeId === 'text' && varName === 'text') {
                             currentObject.crispfaceData.content.value = val;
