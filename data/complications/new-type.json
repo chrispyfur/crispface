@@ -1,0 +1,9 @@
+{
+    "id": "new-type",
+    "name": "Graham",
+    "description": "",
+    "script": "new-type.py",
+    "variables": [],
+    "created_at": "2026-02-14T21:35:53.403834+00:00",
+    "updated_at": "2026-02-15T13:13:51.317353+00:00"
+}

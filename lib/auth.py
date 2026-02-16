@@ -45,6 +45,23 @@ def verify_cookie(cookie_val):
     return payload.get('user')
 
 
+def get_user_from_bearer():
+    """Check Authorization: Bearer <token> header against user api_tokens.
+    Returns username or None."""
+    auth = os.environ.get('HTTP_AUTHORIZATION', '')
+    if not auth.startswith('Bearer '):
+        return None
+    token = auth[7:].strip()
+    if not token:
+        return None
+    users = load_users()
+    for user in users:
+        for t in user.get('api_tokens', []):
+            if hmac.compare_digest(t, token):
+                return user.get('username')
+    return None
+
+
 def get_user_from_request():
     """Read HTTP_COOKIE env var, verify auth cookie, return username or None."""
     cookie_str = os.environ.get('HTTP_COOKIE', '')

@@ -37,6 +37,7 @@ $env = [
     'CONTENT_TYPE' => $_SERVER['CONTENT_TYPE'] ?? '',
     'CONTENT_LENGTH' => $_SERVER['CONTENT_LENGTH'] ?? '',
     'HTTP_COOKIE' => $_SERVER['HTTP_COOKIE'] ?? '',
+    'HTTP_AUTHORIZATION' => $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '',
     'SERVER_NAME' => $_SERVER['SERVER_NAME'] ?? '',
     'SERVER_PORT' => $_SERVER['SERVER_PORT'] ?? '',
     'SCRIPT_NAME' => '/crispface/api/' . $scriptName,

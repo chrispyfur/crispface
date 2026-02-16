@@ -1,0 +1,889 @@
+// ArduinoJson must be included before Watchy.h because Arduino_JSON
+// (bundled with Watchy) defines `#define typeof typeof_` which breaks
+// ArduinoJson's pgmspace macros.
+#include <ArduinoJson.h>
+#include <Watchy.h>
+#include <SPIFFS.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include "config.h"
+#include "fonts.h"
+
+// ---- RTC_DATA_ATTR state (persists across deep sleep) ----
+RTC_DATA_ATTR int  cfFaceIndex   = 0;
+RTC_DATA_ATTR int  cfFaceCount   = 0;
+RTC_DATA_ATTR int  cfLastSync    = 0;
+RTC_DATA_ATTR int  cfSyncInterval = 600; // seconds between server syncs
+RTC_DATA_ATTR bool cfNeedsSync   = true;  // sync on first boot
+RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
+
+// ---- Alert system ----
+struct CfAlert {
+    int  eventTime;     // cfLastSync + min*60
+    bool insistent;
+    bool fired;
+    char text[40];
+};
+RTC_DATA_ATTR CfAlert cfAlerts[10];
+RTC_DATA_ATTR int     cfAlertCount     = 0;
+RTC_DATA_ATTR bool    cfNotifActive    = false;
+RTC_DATA_ATTR bool    cfNotifInsistent = false;
+RTC_DATA_ATTR char    cfNotifText[60]  = "";
+
+class CrispFace : public Watchy {
+public:
+    CrispFace(const watchySettings &s) : Watchy(s) {}
+
+    void drawWatchFace() {
+        // Mount SPIFFS every wake — it's unmounted after deep sleep
+        if (!SPIFFS.begin(true)) {
+            display.fillScreen(GxEPD_WHITE);
+            display.setTextColor(GxEPD_BLACK);
+            display.setFont(NULL);
+            display.setCursor(10, 100);
+            display.print("SPIFFS failed");
+            return;
+        }
+
+        // If RTC was lost (e.g. hard crash), check SPIFFS for cached faces
+        if (cfFaceCount == 0) {
+            for (int i = 0; i < 20; i++) {
+                char path[24];
+                snprintf(path, sizeof(path), "/face_%d.json", i);
+                if (SPIFFS.exists(path)) {
+                    cfFaceCount = i + 1;
+                } else {
+                    break;
+                }
+            }
+            if (cfFaceCount > 0) cfNeedsSync = false;
+        }
+
+        // If insistent notification is active, show it and buzz
+        if (cfNotifActive && cfNotifInsistent) {
+            renderNotification();
+            insistentBuzzLoop();
+            return;
+        }
+
+        int now = makeTime(currentTime);
+
+        // Check if sync needed
+        if (cfNeedsSync || (cfLastSync > 0 && (now - cfLastSync) > cfSyncInterval)
+            || cfFaceCount == 0) {
+            syncFromServer();
+            cfNeedsSync = false;
+            // Re-read time after sync (NTP may have adjusted clock)
+            RTC.read(currentTime);
+            now = makeTime(currentTime);
+        }
+
+        // Check alerts
+        for (int i = 0; i < cfAlertCount; i++) {
+            if (cfAlerts[i].fired) continue;
+            int diff = cfAlerts[i].eventTime - now;
+            if (diff >= 0 && diff <= 300) {
+                cfAlerts[i].fired = true;
+                if (cfAlerts[i].insistent) {
+                    cfNotifActive = true;
+                    cfNotifInsistent = true;
+                    strncpy(cfNotifText, cfAlerts[i].text, 59);
+                    cfNotifText[59] = '\0';
+                    renderNotification();
+                    insistentBuzzLoop();
+                    return;
+                } else {
+                    vibMotor(75, 4);
+                }
+            }
+        }
+
+        // Render current face from SPIFFS
+        if (cfFaceCount > 0) {
+            if (cfFaceIndex >= cfFaceCount) cfFaceIndex = 0;
+            if (cfFaceIndex < 0) cfFaceIndex = cfFaceCount - 1;
+
+            char path[32];
+            snprintf(path, sizeof(path), "/face_%d.json", cfFaceIndex);
+            renderFace(path);
+        } else {
+            renderFallback();
+        }
+    }
+
+    void handleButtonPress() {
+        uint64_t wakeupBit = esp_sleep_get_ext1_wakeup_status();
+
+        // When in a menu/app, let the stock Watchy code handle everything
+        if (guiState != WATCHFACE_STATE) {
+            Watchy::handleButtonPress();
+            return;
+        }
+
+        // If insistent notification active, handle dismissal
+        if (cfNotifActive) {
+            if (wakeupBit & (UP_BTN_MASK | DOWN_BTN_MASK)) {
+                // Dismiss notification
+                cfNotifActive = false;
+                cfNotifInsistent = false;
+                cfNotifText[0] = '\0';
+                RTC.read(currentTime);
+                showWatchFace(true);
+            } else {
+                // BACK/MENU — re-enter notification (will buzz again)
+                RTC.read(currentTime);
+                showWatchFace(true);
+            }
+            return;
+        }
+
+        // Watchface state — our custom button handling
+        if (wakeupBit & MENU_BTN_MASK) {
+            Watchy::handleButtonPress(); // opens stock menu
+        }
+        else if (wakeupBit & UP_BTN_MASK) {
+            if (cfFaceCount > 1) {
+                cfFaceIndex--;
+                if (cfFaceIndex < 0) cfFaceIndex = cfFaceCount - 1;
+            }
+            RTC.read(currentTime);
+            showWatchFace(true);
+        }
+        else if (wakeupBit & DOWN_BTN_MASK) {
+            if (cfFaceCount > 1) {
+                cfFaceIndex++;
+                if (cfFaceIndex >= cfFaceCount) cfFaceIndex = 0;
+            }
+            RTC.read(currentTime);
+            showWatchFace(true);
+        }
+        else if (wakeupBit & BACK_BTN_MASK) {
+            RTC.read(currentTime);
+            int now = makeTime(currentTime);
+            bool doublePress = (cfLastBackPress > 0 && (now - cfLastBackPress) <= 4);
+            cfLastBackPress = now;
+            cfNeedsSync = true;
+            showWatchFace(!doublePress); // double-press = full refresh
+        }
+    }
+
+private:
+
+    // ---- Notification rendering ----
+
+    void renderNotification() {
+        display.setFullWindow();
+        display.fillScreen(GxEPD_WHITE);
+        display.setTextColor(GxEPD_BLACK);
+
+        // Rounded rect border: 10px margin, 2px width, 8px radius
+        display.drawRoundRect(10, 10, 180, 180, 8, GxEPD_BLACK);
+        display.drawRoundRect(11, 11, 178, 178, 7, GxEPD_BLACK);
+
+        int16_t tx, ty;
+        uint16_t tw, th;
+
+        // "ALERT" header centered near top
+        display.setFont(&FreeSans9pt7b);
+        const char* header = "ALERT";
+        display.getTextBounds(header, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 40);
+        display.print(header);
+
+        // Horizontal separator line
+        display.drawLine(20, 50, 180, 50, GxEPD_BLACK);
+
+        // Event text centered in middle area
+        const GFXfont* bodyFont = &FreeSans12pt7b;
+        drawAligned(cfNotifText, 20, 60, 160, 80, "center", bodyFont, GxEPD_BLACK);
+
+        // "Press button to dismiss" hint near bottom
+        display.setFont(&FreeSans9pt7b);
+        const char* hint = "Press button";
+        display.getTextBounds(hint, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 170);
+        display.print(hint);
+    }
+
+    void insistentBuzzLoop() {
+        // Enable button pins as inputs for polling
+        pinMode(UP_BTN_PIN, INPUT);
+        pinMode(DOWN_BTN_PIN, INPUT);
+
+        while (true) {
+            vibMotor(75, 4);
+
+            // Wait 5 seconds, polling buttons every 100ms
+            for (int i = 0; i < 50; i++) {
+                delay(100);
+                if (digitalRead(UP_BTN_PIN) == LOW || digitalRead(DOWN_BTN_PIN) == LOW) {
+                    cfNotifActive = false;
+                    cfNotifInsistent = false;
+                    cfNotifText[0] = '\0';
+                    return;
+                }
+            }
+        }
+    }
+
+    // ---- Server sync ----
+
+    void syncProgress(int percent) {
+        // Thin progress bar at the very bottom — partial window update only
+        const int barY = 196;
+        const int barH = 4;
+        display.fillRect(0, barY, 200, barH, GxEPD_BLACK);
+        if (percent > 0) {
+            int fillW = (200 * percent) / 100;
+            if (fillW > 200) fillW = 200;
+            display.fillRect(0, barY, fillW, barH, GxEPD_WHITE);
+        }
+        display.displayWindow(0, barY, 200, barH);
+    }
+
+    bool cfConnectWiFi() {
+        // Known networks from config (injected at build time)
+        const char* knownSSIDs[] = {
+#if CRISPFACE_WIFI_COUNT >= 1
+            CRISPFACE_WIFI_SSID_0,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 2
+            CRISPFACE_WIFI_SSID_1,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 3
+            CRISPFACE_WIFI_SSID_2,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 4
+            CRISPFACE_WIFI_SSID_3,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 5
+            CRISPFACE_WIFI_SSID_4,
+#endif
+        };
+        const char* knownPasses[] = {
+#if CRISPFACE_WIFI_COUNT >= 1
+            CRISPFACE_WIFI_PASS_0,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 2
+            CRISPFACE_WIFI_PASS_1,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 3
+            CRISPFACE_WIFI_PASS_2,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 4
+            CRISPFACE_WIFI_PASS_3,
+#endif
+#if CRISPFACE_WIFI_COUNT >= 5
+            CRISPFACE_WIFI_PASS_4,
+#endif
+        };
+        const int netCount = CRISPFACE_WIFI_COUNT;
+
+        WiFi.disconnect(true);
+        delay(100);
+        WiFi.mode(WIFI_STA);
+
+        if (netCount == 0) {
+            WiFi.mode(WIFI_OFF);
+            return false;
+        }
+
+        if (netCount == 1) {
+            // Single network — connect directly without scanning
+            WiFi.begin(knownSSIDs[0], knownPasses[0]);
+            int attempts = 0;
+            while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+                delay(500);
+                attempts++;
+            }
+            if (WiFi.status() == WL_CONNECTED) return true;
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+            return false;
+        }
+
+        // Multiple networks — scan and connect to strongest known one
+        int found = WiFi.scanNetworks();
+        if (found <= 0) {
+            WiFi.scanDelete();
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+            return false;
+        }
+
+        // WiFi.scanNetworks() returns results sorted by RSSI (strongest first).
+        // Iterate scan results and try connecting to first known match.
+        for (int i = 0; i < found; i++) {
+            String scannedSSID = WiFi.SSID(i);
+            for (int k = 0; k < netCount; k++) {
+                if (scannedSSID == knownSSIDs[k]) {
+                    WiFi.begin(knownSSIDs[k], knownPasses[k]);
+                    int attempts = 0;
+                    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+                        delay(500);
+                        attempts++;
+                    }
+                    if (WiFi.status() == WL_CONNECTED) {
+                        WiFi.scanDelete();
+                        return true;
+                    }
+                    // Connection failed — try next scanned network
+                    WiFi.disconnect(true);
+                    delay(100);
+                    break;
+                }
+            }
+        }
+
+        WiFi.scanDelete();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+        return false;
+    }
+
+    // Sync RTC from NTP (call while WiFi is connected)
+    void cfSyncNTP() {
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo, 5000)) {
+            tmElements_t tm;
+            tm.Year   = timeinfo.tm_year + 1900 - 1970;
+            tm.Month  = timeinfo.tm_mon + 1;
+            tm.Day    = timeinfo.tm_mday;
+            tm.Hour   = timeinfo.tm_hour;
+            tm.Minute = timeinfo.tm_min;
+            tm.Second = timeinfo.tm_sec;
+            tm.Wday   = timeinfo.tm_wday + 1; // tm_wday 0=Sun → Wday 1=Sun
+            RTC.set(tm);
+            RTC.read(currentTime);
+        }
+    }
+
+    void syncFromServer() {
+        syncProgress(5);
+
+        if (!cfConnectWiFi()) {
+            syncProgress(0);
+            return;
+        }
+
+        // Start NTP in background (non-blocking) — runs while HTTP proceeds
+        configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "pool.ntp.org");
+
+        syncProgress(20);
+
+        WiFiClientSecure client;
+        client.setInsecure();
+
+        HTTPClient http;
+        char url[128];
+        snprintf(url, sizeof(url), "%s%s?watch_id=%s",
+                 CRISPFACE_SERVER, CRISPFACE_API_PATH, CRISPFACE_WATCH_ID);
+
+        http.begin(client, url);
+        char authHeader[80];
+        snprintf(authHeader, sizeof(authHeader), "Bearer %s", CRISPFACE_API_TOKEN);
+        http.addHeader("Authorization", authHeader);
+        http.setUserAgent("CrispFace/" CRISPFACE_VERSION);
+        http.setTimeout(CRISPFACE_HTTP_TIMEOUT);
+        http.setConnectTimeout(CRISPFACE_HTTP_TIMEOUT);
+        http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+        int httpCode = http.GET();
+        if (httpCode != 200) {
+            http.end();
+            cfSyncNTP(); // still sync time even if face fetch failed
+            WiFi.disconnect(true);
+            WiFi.mode(WIFI_OFF);
+            syncProgress(0);
+            return;
+        }
+
+        syncProgress(40);
+
+        // Get payload, sync time, then kill WiFi
+        String payload = http.getString();
+        http.end();
+        cfSyncNTP();
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+
+        syncProgress(50);
+
+        {
+            DynamicJsonDocument doc(16384);
+            DeserializationError err = deserializeJson(doc, payload);
+            payload = "";
+
+            if (err || !doc["success"].as<bool>()) {
+                syncProgress(0);
+                return;
+            }
+
+            JsonArray faces = doc["faces"].as<JsonArray>();
+            int total = faces.size();
+            if (total == 0) {
+                syncProgress(0);
+                return;
+            }
+
+            syncProgress(60);
+
+            // Delete old face files
+            for (int i = 0; i < 10; i++) {
+                char path[24];
+                snprintf(path, sizeof(path), "/face_%d.json", i);
+                SPIFFS.remove(path);
+            }
+
+            int count = 0;
+            int maxServerStale = 0;
+            bool anyServerComp = false;
+
+            for (JsonObject face : faces) {
+                char path[24];
+                snprintf(path, sizeof(path), "/face_%d.json", count);
+
+                File out = SPIFFS.open(path, FILE_WRITE);
+                if (out) {
+                    serializeJson(face, out);
+                    out.close();
+                }
+
+                // Check face-level stale — if -1, skip complication stale checks
+                int faceStale = face["stale"] | 60;
+                if (faceStale > 0) {
+                    for (JsonObject comp : face["complications"].as<JsonArray>()) {
+                        if (!(comp["local"] | false)) {
+                            int s = comp["stale"] | 600;
+                            if (s > 0) {
+                                anyServerComp = true;
+                                if (s > maxServerStale) maxServerStale = s;
+                            }
+                        }
+                    }
+                }
+
+                count++;
+                syncProgress(60 + (30 * count / total));
+            }
+
+            cfFaceCount    = count;
+            // If no server complications need refreshing, sync once a day
+            // (user can always manual-sync via top-left button)
+            cfSyncInterval = anyServerComp ? (maxServerStale > 300 ? maxServerStale : 300) : 86400;
+            cfLastSync     = (int)makeTime(currentTime);
+
+            // Collect alerts from all faces
+            cfAlertCount = 0;
+            int syncTime = cfLastSync;
+            for (JsonObject face : faces) {
+                for (JsonObject comp : face["complications"].as<JsonArray>()) {
+                    JsonArray alerts = comp["alerts"].as<JsonArray>();
+                    if (alerts.isNull()) continue;
+                    for (JsonObject alert : alerts) {
+                        if (cfAlertCount >= 10) break;
+                        int minFromNow = alert["min"] | 0;
+                        if (minFromNow <= 0) continue;
+                        cfAlerts[cfAlertCount].eventTime = syncTime + (minFromNow * 60);
+                        cfAlerts[cfAlertCount].insistent = alert["ins"] | false;
+                        cfAlerts[cfAlertCount].fired = false;
+                        const char* txt = alert["text"] | "Event";
+                        strncpy(cfAlerts[cfAlertCount].text, txt, 39);
+                        cfAlerts[cfAlertCount].text[39] = '\0';
+                        cfAlertCount++;
+                    }
+                    if (cfAlertCount >= 10) break;
+                }
+                if (cfAlertCount >= 10) break;
+            }
+        }
+
+        syncProgress(100);
+    }
+
+    // ---- Render face from SPIFFS ----
+
+    void renderFace(const char* path) {
+        display.setFullWindow();
+        File f = SPIFFS.open(path, FILE_READ);
+        if (!f) { renderFallback(); return; }
+
+        DynamicJsonDocument doc(8192);
+        DeserializationError err = deserializeJson(doc, f);
+        f.close();
+        if (err) { renderFallback(); return; }
+
+        // Background
+        const char* bg = doc["bg"] | "white";
+        display.fillScreen(strcmp(bg, "black") == 0 ? GxEPD_BLACK : GxEPD_WHITE);
+
+        int now = makeTime(currentTime);
+
+        // Render each complication
+        for (JsonObject comp : doc["complications"].as<JsonArray>()) {
+            renderComplication(comp, now);
+        }
+    }
+
+    // ---- Render single complication ----
+
+    void renderComplication(JsonObject comp, int now) {
+        int x           = comp["x"] | 0;
+        int y           = comp["y"] | 0;
+        int w           = comp["w"] | 0;
+        int h           = comp["h"] | 0;
+        int stale       = comp["stale"] | 60;
+        const char* val = comp["value"] | "";
+        const char* ff  = comp["font"] | "sans";
+        int sz          = comp["size"] | 16;
+        bool bold       = comp["bold"] | false;
+        const char* al  = comp["align"] | "left";
+        const char* col = comp["color"] | "black";
+        bool isLocal    = comp["local"] | false;
+        const char* typ = comp["type"] | "";
+        const char* cid = comp["id"] | "";
+        int bw          = comp["bw"] | 0;
+        int br          = comp["br"] | 0;
+        int bp          = comp["bp"] | 0;
+
+        // Resolve local values — check id first (type may be empty)
+        String localVal;
+        if (isLocal) {
+            localVal = resolveLocal(strlen(typ) > 0 ? typ : cid);
+            val = localVal.c_str();
+        }
+
+        // Stale check (server complications only; stale <= 0 means never expires)
+        bool isStale = !isLocal && stale > 0 && cfLastSync > 0 && (now - cfLastSync) > stale;
+
+        const GFXfont* font = getFont(ff, sz, bold);
+        uint16_t color = (strcmp(col, "white") == 0) ? GxEPD_WHITE : GxEPD_BLACK;
+
+        // Draw border if configured
+        if (bw > 0) {
+            drawBorder(x, y, w, h, bw, br, color);
+        }
+
+        // Inset text area by border width + padding (only when border exists)
+        int inset = (bw > 0) ? (bw + bp) : 0;
+        int tx = x + inset;
+        int ty = y + inset;
+        int tw = w - inset * 2;
+        int th = h - inset * 2;
+        if (tw < 1) tw = 1;
+        if (th < 1) th = 1;
+
+        // Battery: check display param (icon/percentage/voltage)
+        const char* effType = strlen(typ) > 0 ? typ : cid;
+        String batVal; // must outlive val pointer
+        if (isLocal && strcmp(effType, "battery") == 0) {
+            const char* batDisplay = comp["params"]["display"] | "icon";
+            if (strcmp(batDisplay, "icon") == 0) {
+                drawBatteryIcon(tx, ty, tw, th, color);
+                return;
+            }
+            batVal = resolveBattery(batDisplay);
+            val = batVal.c_str();
+        }
+
+        if (isStale) {
+            drawItalic(val, tx, ty, tw, th, al, font, color);
+        } else {
+            drawAligned(val, tx, ty, tw, th, al, font, color);
+        }
+    }
+
+    // ---- Draw border (rect or rounded rect) ----
+
+    void drawBorder(int x, int y, int w, int h, int bw, int br, uint16_t color) {
+        if (br <= 0) {
+            // Simple rectangle border
+            for (int i = 0; i < bw; i++) {
+                display.drawRect(x + i, y + i, w - 2 * i, h - 2 * i, color);
+            }
+        } else {
+            // Rounded rectangle border
+            int r = br;
+            if (r > w / 2) r = w / 2;
+            if (r > h / 2) r = h / 2;
+            for (int i = 0; i < bw; i++) {
+                display.drawRoundRect(x + i, y + i, w - 2 * i, h - 2 * i, r, color);
+                if (r > 1) r--;
+            }
+        }
+    }
+
+    // ---- Battery icon ----
+
+    void drawBatteryIcon(int x, int y, int w, int h, uint16_t color) {
+        float v = getBatteryVoltage();
+        int pct = (int)((v - 3.3f) / (4.2f - 3.3f) * 100.0f);
+        if (pct < 0) pct = 0;
+        if (pct > 100) pct = 100;
+
+        // Body dimensions (leave room for nub on right)
+        int nubW = 2;
+        int gap = 1;
+        int bodyW = w - nubW - gap;
+        if (bodyW < 6) bodyW = 6;
+
+        // Body outline
+        display.drawRect(x, y, bodyW, h, color);
+
+        // Nub (centered vertically on right side)
+        int nubH = h * 2 / 5;
+        if (nubH < 2) nubH = 2;
+        int nubY = y + (h - nubH) / 2;
+        display.fillRect(x + bodyW + gap, nubY, nubW, nubH, color);
+
+        // Fill proportional to charge (2px inset from body edge)
+        int pad = 2;
+        int maxFillW = bodyW - pad * 2;
+        int fillW = (maxFillW * pct) / 100;
+        if (fillW > 0) {
+            display.fillRect(x + pad, y + pad, fillW, h - pad * 2, color);
+        }
+    }
+
+    // ---- Battery text (percentage or voltage) ----
+
+    String resolveBattery(const char* mode) {
+        float v = getBatteryVoltage();
+        char buf[8];
+        if (strcmp(mode, "percentage") == 0) {
+            int pct = (int)((v - 3.3f) / (4.2f - 3.3f) * 100.0f);
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+            snprintf(buf, sizeof(buf), "%d%%", pct);
+        } else {
+            snprintf(buf, sizeof(buf), "%.1fV", v);
+        }
+        return String(buf);
+    }
+
+    // ---- Local complication values ----
+
+    String resolveLocal(const char* type) {
+        if (strcmp(type, "time") == 0) {
+            char buf[6];
+            snprintf(buf, sizeof(buf), "%02d:%02d",
+                     currentTime.Hour, currentTime.Minute);
+            return String(buf);
+        }
+        if (strcmp(type, "date") == 0) {
+            static const char* days[] =
+                {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
+            static const char* mons[] =
+                {"Jan","Feb","Mar","Apr","May","Jun",
+                 "Jul","Aug","Sep","Oct","Nov","Dec"};
+            int dow = currentTime.Wday - 1; // Wday is 1-7 (Sun=1), array is 0-6
+            int mon = currentTime.Month - 1;
+            if (dow < 0 || dow > 6) dow = 0;
+            if (mon < 0 || mon > 11) mon = 0;
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%s %d %s",
+                     days[dow], currentTime.Day, mons[mon]);
+            return String(buf);
+        }
+        return String(type);
+    }
+
+    // ---- Draw multi-line aligned text ----
+
+    void drawAligned(const char* text, int bx, int by, int bw, int bh,
+                     const char* align, const GFXfont* font, uint16_t color) {
+        display.setFont(font);
+
+        int16_t tx, ty;
+        uint16_t tw, th;
+        display.getTextBounds("Ay", 0, 0, &tx, &ty, &tw, &th);
+        int ascent = -(int)ty;  // distance from baseline to top of tallest char
+        int lineH = (int)th + 2;
+
+        String str(text);
+        int curY = by + ascent; // baseline so text top aligns with top of area
+        int idx = 0;
+        bool firstLine = true;
+
+        while (idx <= (int)str.length() && (firstLine || (curY - by) <= bh)) {
+            int nl = str.indexOf('\n', idx);
+            String line = (nl < 0) ? str.substring(idx)
+                                   : str.substring(idx, nl);
+            idx = (nl < 0) ? str.length() + 1 : nl + 1;
+
+            display.getTextBounds(line.c_str(), 0, 0, &tx, &ty, &tw, &th);
+            int curX;
+            if (strcmp(align, "center") == 0)
+                curX = bx + (bw - (int)tw) / 2;
+            else if (strcmp(align, "right") == 0)
+                curX = bx + bw - (int)tw;
+            else
+                curX = bx;
+
+            // Render glyph-by-glyph with pixel clipping to bounds
+            int penX = curX;
+            for (int i = 0; i < (int)line.length(); i++) {
+                uint8_t c = (uint8_t)line[i];
+                if (c < font->first || c > font->last) continue;
+
+                GFXglyph *gl = &font->glyph[c - font->first];
+                uint8_t  *bm = font->bitmap;
+                uint16_t  bo = gl->bitmapOffset;
+                uint8_t   gw = gl->width;
+                uint8_t   gh = gl->height;
+                int8_t    xo = gl->xOffset;
+                int8_t    yo = gl->yOffset;
+
+                uint8_t bit = 0, bits = 0;
+                for (int row = 0; row < gh; row++) {
+                    for (int col = 0; col < gw; col++) {
+                        if (!(bit++ & 7))
+                            bits = pgm_read_byte(&bm[bo++]);
+                        if (bits & 0x80) {
+                            int px = penX + xo + col;
+                            int py = curY + yo + row;
+                            if (px >= bx && px < bx + bw &&
+                                py >= by && py < by + bh)
+                                display.drawPixel(px, py, color);
+                        }
+                        bits <<= 1;
+                    }
+                }
+                penX += gl->xAdvance;
+            }
+            firstLine = false;
+            curY += lineH;
+        }
+    }
+
+    // ---- Fake italic via per-row pixel skew ----
+
+    void drawItalic(const char* text, int bx, int by, int bw, int bh,
+                    const char* align, const GFXfont* font, uint16_t color) {
+        display.setFont(font);
+
+        int16_t tx, ty;
+        uint16_t tw, th;
+        display.getTextBounds("Ay", 0, 0, &tx, &ty, &tw, &th);
+        int ascent = -(int)ty;
+        int lineH = (int)th + 2;
+        int skew = lineH / 5;
+        if (skew < 1) skew = 1;
+
+        String str(text);
+        int curY = by + ascent;
+        int idx = 0;
+        bool firstLine = true;
+
+        while (idx <= (int)str.length() && (firstLine || (curY - by) <= bh)) {
+            int nl = str.indexOf('\n', idx);
+            String line = (nl < 0) ? str.substring(idx)
+                                   : str.substring(idx, nl);
+            idx = (nl < 0) ? str.length() + 1 : nl + 1;
+
+            // Alignment
+            display.getTextBounds(line.c_str(), 0, 0, &tx, &ty, &tw, &th);
+            int baseX;
+            if (strcmp(align, "center") == 0)
+                baseX = bx + (bw - (int)tw) / 2;
+            else if (strcmp(align, "right") == 0)
+                baseX = bx + bw - (int)tw;
+            else
+                baseX = bx;
+
+            // Render each glyph with X shear
+            int penX = baseX;
+            for (int i = 0; i < (int)line.length(); i++) {
+                uint8_t c = (uint8_t)line[i];
+                if (c < font->first || c > font->last) continue;
+
+                GFXglyph *gl = &font->glyph[c - font->first];
+                uint8_t  *bm = font->bitmap;
+                uint16_t  bo = gl->bitmapOffset;
+                uint8_t   gw = gl->width;
+                uint8_t   gh = gl->height;
+                int8_t    xo = gl->xOffset;
+                int8_t    yo = gl->yOffset;
+
+                uint8_t bit = 0, bits = 0;
+                for (int row = 0; row < gh; row++) {
+                    int shear = (int)((float)(gh - row) * skew / gh);
+                    for (int col = 0; col < gw; col++) {
+                        if (!(bit++ & 7))
+                            bits = pgm_read_byte(&bm[bo++]);
+                        if (bits & 0x80) {
+                            int px = penX + xo + col + shear;
+                            int py = curY + yo + row;
+                            if (px >= bx && px < bx + bw &&
+                                py >= by && py < by + bh)
+                                display.drawPixel(px, py, color);
+                        }
+                        bits <<= 1;
+                    }
+                }
+                penX += gl->xAdvance;
+            }
+            firstLine = false;
+            curY += lineH;
+        }
+    }
+
+    // ---- Fallback screen ----
+
+    void renderFallback() {
+        display.setFullWindow();
+        display.fillScreen(GxEPD_BLACK);
+        display.setTextColor(GxEPD_WHITE);
+
+        int16_t tx, ty;
+        uint16_t tw, th;
+
+        // Title
+        display.setFont(&FreeSans9pt7b);
+        const char* title = "CrispFace v" CRISPFACE_VERSION;
+        display.getTextBounds(title, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 40);
+        display.print(title);
+
+        // Time
+        display.setFont(&FreeSans24pt7b);
+        char tbuf[6];
+        snprintf(tbuf, sizeof(tbuf), "%02d:%02d",
+                 currentTime.Hour, currentTime.Minute);
+        display.getTextBounds(tbuf, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 110);
+        display.print(tbuf);
+
+        // Instructions
+        display.setFont(&FreeSans9pt7b);
+        const char* l1 = "No faces cached";
+        const char* l2 = "Press top-left to sync";
+        display.getTextBounds(l1, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 155);
+        display.print(l1);
+        display.getTextBounds(l2, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 180);
+        display.print(l2);
+    }
+};
+
+// ---- Entry point ----
+
+watchySettings settings {
+    .cityID = "",
+    .lat = "",
+    .lon = "",
+    .weatherAPIKey = "",
+    .weatherURL = "",
+    .weatherUnit = "metric",
+    .weatherLang = "en",
+    .weatherUpdateInterval = 30,
+    .ntpServer = "pool.ntp.org",
+    .gmtOffset = 0,
+    .vibrateOClock = false
+};
+
+CrispFace face(settings);
+
+void setup() { face.init(); }
+void loop() {}

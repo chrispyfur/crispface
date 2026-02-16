@@ -1,141 +1,164 @@
-# CrispFace Firmware Specification v0.4
+# CrispFace Firmware Specification v0.5
 
-Firmware for the Watchy ESP32 thin client that renders CrispFace watch faces.
+Firmware for the Watchy ESP32-S3 thin client that renders CrispFace watch faces.
 
 ---
 
 ## Overview
 
-The Watchy runs as a thin client. It fetches face definitions and complication data from the CrispRain server, renders them locally on a 200x200 1-bit e-paper display, and returns to deep sleep. Time is always rendered locally via the RTC.
+The Watchy runs as a thin client. It fetches face definitions and pre-resolved complication data from the CrispRain server, caches them on SPIFFS, renders them locally on a 200x200 1-bit e-paper display, and returns to deep sleep. Local complications (time, date, battery) are always rendered from on-device hardware.
 
 ```
 ┌─────────────┐         ┌─────────────────┐
 │   Watchy    │ ◄─────► │  CrispRain API  │
-│  (Client)   │  HTTP   │  (Server)       │
+│  (Client)   │  HTTPS  │  (Server)       │
 └─────────────┘         └─────────────────┘
 ```
 
 **Design Principles:**
-- Watch is a dumb renderer - all logic lives on server
-- Minimal firmware footprint for portability to future hardware
-- Build on stock Watchy firmware - inherit WiFi menu, settings, timezone, not reinvent
-- Button-press-only wake - no tilt-to-wake, no timed wake, maximum battery life
+- Watch is a dumb renderer — all logic lives on server
+- Minimal firmware footprint — single main.cpp file
+- Build on stock Watchy firmware — inherit WiFi menu, settings, timezone
+- Button-press-only wake — no tilt-to-wake, no timed wake, maximum battery life
+- Kill WiFi as early as possible during sync to save battery
 
 ---
 
 ## Firmware Architecture
 
 ```
-crispface-firmware/
+firmware/
 ├── src/
-│   ├── main.cpp              # Entry point, sleep management
-│   ├── CrispFace.cpp         # Core renderer
-│   ├── Network.cpp           # WiFi, HTTP client
-│   ├── Controls.cpp          # Button handling
-│   ├── Parser.cpp            # JSON parsing (ArduinoJson)
-│   ├── TimeBindings.cpp      # On-device time template resolution
-│   └── Display.cpp           # GxEPD2 abstraction
+│   └── main.cpp              # Everything: renderer, sync, buttons, fonts
+├── src_stock/
+│   └── main.cpp              # Stock Watchy firmware (separate build env)
 ├── include/
-│   ├── types.h               # Face, Complication structs
-│   ├── fonts.h               # Baked-in font data
-│   └── config.h              # Server URL, WiFi creds, token
-└── platformio.ini
+│   ├── config.h              # Server URL, WiFi creds, token, version
+│   └── fonts.h               # Font lookup table (editor px → GFX pt)
+├── platformio.ini            # Two envs: watchy, stock
+└── build.sh                  # Manual build script
 ```
+
+The firmware is intentionally kept in a single `main.cpp` file. The CrispFace class extends Watchy and overrides `drawWatchFace()` and `handleButtonPress()`.
+
+### Dependencies
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| sqfmi/Watchy | latest | Base firmware (display, RTC, WiFi, deep sleep) |
+| bblanchon/ArduinoJson | ^6 | JSON parsing (v7 conflicts with bundled Arduino_JSON) |
+
+**Critical**: ArduinoJson must be `#include`d before Watchy.h due to Arduino_JSON's `#define typeof typeof_` macro conflict.
 
 ### Memory Budget
 
-- ESP32 has ~320KB SRAM
-- Face JSON: max 4KB
-- Bitmap cache: ~8KB for frequently used icons
-- Font data: ~12KB (3 fonts, multiple sizes)
-- Working buffer: ~5KB for display rendering
+- ESP32-S3 has ~320KB SRAM
+- ArduinoJson doc for sync: 8KB
+- ArduinoJson doc for face render: 4KB
+- Font data: ~40KB (FreeSans, FreeSansBold, FreeMono at 9/12/18/24pt)
+- Display framebuffer: 5KB (200x200 1-bit, managed by GxEPD2)
+
+---
+
+## RTC_DATA_ATTR State
+
+These persist across deep sleep cycles but are lost on hard crash or brownout:
+
+| Variable | Type | Default | Purpose |
+|----------|------|---------|---------|
+| `cfFaceIndex` | int | 0 | Current face index |
+| `cfFaceCount` | int | 0 | Number of cached faces |
+| `cfLastSync` | int | 0 | Unix timestamp of last server sync (watch RTC) |
+| `cfSyncInterval` | int | 600 | Seconds between server syncs |
+| `cfNeedsSync` | bool | true | Flag set by sync button or first boot |
+| `cfLastBackPress` | int | 0 | Timestamp of last sync button press (double-press detection) |
+
+On boot, if `cfFaceCount` is 0 (RTC lost), firmware probes SPIFFS for `/face_0.json`, `/face_1.json`, etc. to recover the count.
 
 ---
 
 ## Face Rendering
 
-### Face Structure
+### drawWatchFace() Flow
 
-The firmware receives face definitions as JSON from the server and renders them onto the 200x200 1-bit display.
-
-```json
-{
-  "id": "daily-driver",
-  "name": "Daily Driver",
-  "background": "black",
-  "stale_seconds": 900,
-  "complications": [...],
-  "controls": {...}
-}
-```
+1. Mount SPIFFS (every wake — unmounted after deep sleep)
+2. If `cfFaceCount == 0`, probe SPIFFS for cached faces
+3. Check sync conditions: `cfNeedsSync || (now - cfLastSync) > cfSyncInterval || cfFaceCount == 0`
+4. If sync needed → `syncFromServer()` (with progress bar overlay)
+5. Load `/face_{cfFaceIndex}.json` from SPIFFS
+6. Fill screen with background colour (black or white)
+7. For each complication: resolve value, select font, calculate alignment, render
 
 ### Complication Rendering
 
-Each complication occupies a rectangular region and is rendered by type:
+Each complication is rendered as positioned text within a bounding box:
 
-| Type | Rendering |
-|------|-----------|
-| `text` | Draw text string with specified font, alignment, and color |
-| `bitmap` | Decode base64 1-bit bitmap and blit to display region |
-| `progress` | Draw filled/segmented bar proportional to value |
-| `qr` | Generate and render QR code from data string |
+| Field | Description |
+|-------|-------------|
+| `x`, `y`, `w`, `h` | Bounding rectangle (pixels) |
+| `font` | `"sans"` or `"mono"` |
+| `size` | Editor CSS px (8, 12, 16, 24, 48) |
+| `bold` | Boolean |
+| `align` | `"left"`, `"center"`, `"right"` |
+| `color` | `"black"` or `"white"` |
+| `local` | If true, value resolved from RTC/ADC |
+| `stale` | Seconds before data is considered stale |
+| `value` | Pre-resolved text string from server |
 
-**Baked-in Fonts (3 total):**
-- `sans` - Clean sans-serif (sizes: 16, 24, 48)
-- `mono` - Monospace for data (size: 16)
-- `icons` - Icon glyphs (size: 24)
+### Font Size Mapping
 
-### Face Cycling
+Editor CSS px values map to Adafruit GFX pt sizes:
 
-The watch maintains an ordered list of faces. No stack, no modals - just simple cycling.
+| Editor px | GFX pt | Approximate render height |
+|-----------|--------|--------------------------|
+| 8, 12 | 9pt | ~13px |
+| 16 | 12pt | ~17px |
+| 24 | 18pt | ~25px |
+| 48 | 24pt | ~33px |
 
-| Button Action | Behavior |
-|---------------|----------|
-| `next_face` | Move to next face in list |
-| `prev_face` | Move to previous face in list |
+Available fonts: FreeSans (regular + bold) and FreeMono (regular) at all four pt sizes. Custom 48pt fonts are currently disabled (fall back to 24pt).
 
-Face list is received from the server during sync.
+### Local Complications
+
+Resolved on-device from hardware, never trigger network fetches:
+
+| Type/ID | Rendered Value | Source |
+|---------|---------------|--------|
+| `time` | `HH:MM` (24h) | RTC |
+| `date` | `"Sat 14 Feb"` | RTC |
+| `battery` | `"3.8V"` | ADC |
+
+The firmware checks both `type` and `id` fields — `type` may be empty in older face JSON, with the identifier in `id` instead.
+
+### Stale Data
+
+Server complications whose age exceeds their `stale` value are rendered in fake italic. The italic effect is achieved by per-row pixel X-shear on glyph bitmaps (no separate italic font needed).
 
 ---
 
-## Refresh & Staleness
+## Server Sync
 
-### Time Handling
+### syncFromServer() Flow
 
-**Time is handled on-device via the RTC.** The server syncs the RTC periodically via NTP, but the watch renders time locally. This ensures time is always accurate, even between server syncs.
+1. Show progress bar at 5%
+2. Connect WiFi (STA mode, up to 40 attempts at 500ms intervals)
+3. Progress 20% — HTTPS GET with Bearer token, User-Agent, redirect following
+4. Progress 40% — read full response as String
+5. **Disconnect WiFi immediately** (biggest power drain)
+6. Progress 50% — parse JSON (8KB ArduinoJson doc)
+7. Progress 60% — delete old `/face_*.json` files from SPIFFS
+8. Write each face to SPIFFS, progress 60→90%
+9. Compute `cfSyncInterval` from max stale of non-local complications (minimum 300s)
+10. Set `cfLastSync` from watch RTC (not server time — avoids clock mismatch)
+11. Progress 100%
 
-Special template `{{time.*}}` is resolved on-device:
-- `{{time.hour}}` - Current hour (24h)
-- `{{time.hour12}}` - Current hour (12h)
-- `{{time.minute}}` - Current minute (zero-padded)
-- `{{time.second}}` - Current second
-- `{{time.weekday}}` - Day name (Mon, Tue, etc.)
-- `{{time.date}}` - Date string (e.g., "Feb 7")
-- `{{time.ampm}}` - AM/PM indicator
+### Progress Bar
 
-Also resolved on-device:
-- `{{battery.pct}}` - Current battery percentage
+During sync, a 4px black/white progress bar is drawn at the very bottom of the display (y=196-200) using `display.displayWindow()` for partial window updates. The existing face remains visible above the bar. The bar is naturally overwritten when the face re-renders after sync.
 
-### Staleness
+### Error Handling
 
-Each complication can define its own `stale_seconds`. When stale:
-1. Watch fetches updated content for that complication
-2. Re-renders only affected region
-3. Uses partial display refresh when possible
-
-Example: Weather updates every 30 min, battery every 5 min, time every 1 min (via RTC, no fetch needed).
-
-### Wake & Refresh Triggers
-
-The watch stays in deep sleep until a button is pressed. No timed wake, no tilt-to-wake. This maximizes battery life.
-
-On wake (button press):
-1. Check staleness of each complication
-2. Fetch updates for stale complications (or full face if needed)
-3. Re-render and display
-4. Return to deep sleep
-
-**Note:** Time complications never trigger network fetches - they use the on-device RTC.
+On failure (WiFi, HTTP, JSON parse), the progress bar resets to 0% (empty) and the firmware falls back to cached faces. No delays or error screens — the user sees their existing face with the bar briefly appearing and disappearing.
 
 ---
 
@@ -144,245 +167,120 @@ On wake (button press):
 ### Button Layout
 
 ```
-[btn1]          [btn3]
-   (top-left)      (top-right)
+[top-left: Sync]      [top-right: Prev face]
 
-[btn2]          [btn4]
-   (bottom-left)   (bottom-right)
+[bottom-left: Menu]   [bottom-right: Next face]
 ```
 
-Each button supports three input types:
-- **Short press** - Quick tap
-- **Long press** - Hold for 1 second
-- **Double tap** - Two quick taps within 300ms
+### Button Actions
 
-### Available Actions
+| Button | Position | Action |
+|--------|----------|--------|
+| BACK | Top-left | Set sync flag, re-render (partial refresh) |
+| BACK x2 | Top-left double-press (within 4s) | Sync + full display refresh (clears ghosting) |
+| MENU | Bottom-left | Open stock Watchy menu |
+| UP | Top-right | Previous face (wraps) |
+| DOWN | Bottom-right | Next face (wraps) |
 
-| Action | Firmware Behavior |
-|--------|-------------------|
-| `none` | Ignore input |
-| `refresh` | Force refresh - fetch all complication data and re-render |
-| `next_face` | Advance to next face in list, fetch if not cached |
-| `prev_face` | Go to previous face in list, fetch if not cached |
-| `menu` | Pass control to stock Watchy menu system |
-| `invert` | Toggle display color inversion locally |
-| `custom` | HTTP POST to specified endpoint with device context |
+All face renders use **partial refresh** by default (no flicker). Only a double-press of the sync button triggers a full refresh to clear e-paper ghosting.
 
-### Default Button Mapping
+When in the stock Watchy menu (`guiState != WATCHFACE_STATE`), all buttons are passed through to the stock handler.
 
-| Button | Short | Long | Double |
-|--------|-------|------|--------|
-| btn1 (top-left) | `menu` | `none` | `none` |
-| btn2 (bottom-left) | `refresh` | `none` | `none` |
-| btn3 (top-right) | `next_face` | `none` | `none` |
-| btn4 (bottom-right) | `prev_face` | `none` | `none` |
+### Fallback Screen
 
-### Custom Actions
-
-When `action` is `custom`, the watch POSTs to the specified endpoint:
-
-```json
-{
-  "device_id": "watchy-a1b2c3",
-  "button": "btn4",
-  "face_id": "daily-driver",
-  "timestamp": "2026-02-07T10:35:22Z"
-}
-```
-
-### Haptic Feedback
-
-`vibrate`: Duration in milliseconds (0 = none). Applies to all actions on that button.
-
-### Menu Mode
-
-When the `menu` action is triggered, control passes to the **stock Watchy menu system**:
-
-| Button | Stock Menu Function |
-|--------|---------------------|
-| btn1 | Back / Exit |
-| btn2 | Down |
-| btn3 | Up |
-| btn4 | Select / Enter |
-
-CrispFace button mappings only apply when displaying a CrispFace face. Exiting the menu returns to the current face with CrispFace mappings restored.
+When no faces are cached (first boot or SPIFFS wiped):
+- Black background with "CrispFace v{version}", current time, and "Press top-left to sync"
 
 ---
 
-## Server Communication
+## Build Pipeline
 
-### Sync (Primary Endpoint)
+### PlatformIO Environments
 
-**POST** `/api/crispface/sync`
+| Environment | Source | Output |
+|-------------|--------|--------|
+| `watchy` | `src/main.cpp` | CrispFace firmware |
+| `stock` | `src_stock/main.cpp` | Stock Watchy firmware |
 
-Sent on wake when complications are stale.
+### Build-on-Demand
 
-Request:
-```json
-{
-  "device_id": "watchy-a1b2c3",
-  "battery_pct": 78,
-  "current_face": "daily-driver",
-  "stale_complications": ["weather-temp", "calendar-next"]
-}
-```
+`api/build_firmware.php` handles web-triggered builds:
 
-Response:
-```json
-{
-  "faces": ["daily-driver", "minimal", "calendar-view"],
-  "current_face": {
-    "id": "daily-driver",
-    "complications": [...]
-  },
-  "complication_updates": {
-    "weather-temp": {"value": "12°", ...},
-    "calendar-next": {"value": "Team sync in 2h", ...}
-  },
-  "ntp_sync": true
-}
-```
+1. Auto-bumps patch version in `config.h` (e.g. 0.2.18 → 0.2.19)
+2. Runs `pio run -e watchy` (or stock)
+3. Merges binary with `esptool --chip esp32s3 merge-bin` (bootloader + partitions + boot_app0 + firmware)
+4. Writes timestamped binary and manifest JSON to `firmware-builds/`
+5. Cleans up old builds (keeps last 3)
+6. Returns `{success, manifest, version, size}` as JSON
 
-### Registration
+### Web Serial Flashing
 
-**POST** `/api/crispface/register`
+`flash.html` provides browser-based flashing via ESP Web Tools:
 
-Sent on first boot or factory reset.
+1. **Test Connection** — opens serial port picker, verifies device is detected
+2. **Build** — triggers server-side compilation, shows version and size
+3. **Flash to Watchy** — appears after successful build, user clicks to open serial port picker and flash
 
-```json
-{
-  "device_id": "watchy-a1b2c3",
-  "firmware_version": "crispface-0.1.0",
-  "capabilities": {
-    "display": "200x200x1",
-    "buttons": 4,
-    "sensors": ["accelerometer", "rtc", "battery"]
-  }
-}
-```
-
-### Face Fetch
-
-**GET** `/api/crispface/face/{face_id}`
-
-Fetch full face JSON when switching to a face not in cache.
-
-### Authentication
-
-- Pre-shared token stored in NVS (non-volatile storage)
-- Sent via `Authorization: Bearer <token>` header on every request
-- Token provisioned during initial setup (see Web Serial Flashing below)
-- Server returns 401 if token is invalid
-
-### Protocol Versioning
-
-All requests include header:
-
-```
-X-CrispFace-Version: 0.4
-```
-
-If the server returns a `version_mismatch` error, the firmware should display an "Update Required" message.
+Requires Chrome or Edge 89+ (Web Serial API). The Flash button must be clicked directly by the user — programmatic clicks don't satisfy the user gesture requirement for `navigator.serial.requestPort()`.
 
 ---
 
-## Offline Behavior
+## Configuration
 
-When the server is unreachable:
+`include/config.h` contains all runtime configuration:
 
-1. **Display cached face** - Last successfully fetched face is stored in flash
-2. **Show offline indicator** - Small icon (e.g., crossed WiFi) in corner
-3. **Time still works** - RTC-based complications render correctly
-4. **Buttons still work** - Local actions (next_face, prev_face, menu) function normally
-5. **Custom actions queue** - Optional: store pending custom button presses, send when reconnected
-
-On next successful sync, the offline indicator clears and fresh data is displayed.
-
----
-
-## Inherited from Stock Watchy
-
-CrispFace extends the stock Watchy firmware rather than replacing it. The following are inherited:
-
-- **WiFi menu** - SSID selection and password entry
-- **Settings menu** - Timezone, NTP server, vibration settings
-- **Accelerometer setup** - BMA423 initialization
-- **RTC management** - Time sync and alarm configuration
-- **Deep sleep handling** - Power management
-
-CrispFace hooks into `drawWatchFace()` and button handling, leaving the rest intact. Access the stock menu via a button mapped to the `menu` action.
+| Define | Description |
+|--------|-------------|
+| `CRISPFACE_VERSION` | Firmware version (auto-bumped by build endpoint) |
+| `CRISPFACE_SERVER` | Server URL (https://...) |
+| `CRISPFACE_API_PATH` | API endpoint path |
+| `CRISPFACE_WATCH_ID` | Watch identifier for this device |
+| `CRISPFACE_API_TOKEN` | Bearer token for API auth |
+| `CRISPFACE_HTTP_TIMEOUT` | HTTP timeout in ms (15000) |
+| `CRISPFACE_WIFI_SSID` | WiFi SSID (hardcoded) |
+| `CRISPFACE_WIFI_PASS` | WiFi password (hardcoded) |
 
 ---
 
-## Web Serial Flashing
+## Known Issues & Gotchas
 
-The firmware can be flashed directly from a web browser using the **Web Serial API**, eliminating the need for users to install PlatformIO, Arduino IDE, or esptool. This is the recommended approach for end-user device provisioning.
-
-### How It Works
-
-The Web Serial API (available in Chrome and Edge, version 89+) allows web pages to communicate with serial ports. Combined with a JavaScript implementation of the ESP32 flash protocol, the entire flashing process runs in the browser.
-
-### Recommended Tooling
-
-**ESP Web Tools** (by ESPHome) is the most mature option:
-- Supports ESP32 (and ESP32-S2, S3, C3, etc.)
-- Manifest-based: describe firmware builds in a JSON manifest
-- Automatically detects connected chip family
-- Requires a single merged firmware binary (use `esptool.py merge_bin` to combine the 4 ESP-IDF output files)
-- Embeddable as a web component: `<esp-web-install-button>`
-
-**Alternative tools:**
-- **esptool-js** - Pure JS implementation of esptool, good for custom integration
-- **ESPConnect** - Also supports filesystem inspection (SPIFFS/LittleFS)
-
-### Integration with CrispFace
-
-The web builder can include a "Flash Device" page that:
-
-1. User connects Watchy via USB
-2. Browser prompts for serial port access
-3. Firmware binary is downloaded and flashed
-4. On first boot, device generates a `device_id`
-5. Web builder displays the device ID and provisions an auth token
-6. Token is written to NVS via serial (or via a first-boot API call)
-
-This replaces the previous "token provisioned via USB serial" step with a fully browser-based flow.
-
-### Browser Requirements
-
-- **Chrome 89+** or **Edge 89+** (Chromium-based)
-- **Not supported**: Safari, Firefox, any iOS browser
-- Desktop only (USB serial requires physical connection)
-
-### Build Pipeline
-
-For Web Serial flashing, the firmware must be built as a single merged binary:
-
-```bash
-# Build with PlatformIO
-pio run -e watchy
-
-# Merge into single binary
-esptool.py --chip esp32 merge_bin \
-  -o crispface-firmware.bin \
-  --flash_mode dio \
-  --flash_size 4MB \
-  0x1000 bootloader.bin \
-  0x8000 partitions.bin \
-  0xe000 boot_app0.bin \
-  0x10000 firmware.bin
-```
-
-The merged binary is then hosted on the server and referenced in the ESP Web Tools manifest.
+- **SPIFFS has no real directories** — `SPIFFS.mkdir()` or `SPIFFS.open("/dirname")` crashes the ESP32. Files are stored flat in root (`/face_0.json`)
+- **ArduinoJson v6 only** — v7 conflicts with Arduino_JSON bundled by Watchy
+- **RTC_DATA_ATTR lost on crash** — firmware recovers face count from SPIFFS on boot
+- **Watch RTC may be wrong** — timestamps are relative, not absolute. Both cfLastSync and staleness use `makeTime(currentTime)` so the difference is always correct
+- **Custom 48pt fonts disabled** — the generated font headers had issues. Falls back to 24pt for now
+- **WiFi.mode(WIFI_STA) required** before WiFi.begin() on ESP32-S3
 
 ---
 
-## Future Considerations
+## Implemented vs Planned
 
-- **OTA updates**: Push firmware updates from server (no USB needed after initial flash)
-- **Downloadable fonts**: Fetch additional fonts from server, store in flash
-- **Step counter integration**: Read BMA423 step counter, report to server
-- **Display partial refresh**: Optimize for per-complication refresh to reduce ghosting
+### Implemented (v0.2.x)
+- Text complications with positioning, fonts, alignment, colour
+- Local complications: time, date, battery
+- Server-side complication resolution (weather, etc.)
+- Face cycling (top-right/bottom-right buttons)
+- Manual sync (top-left button)
+- Auto-sync on stale interval
+- SPIFFS face caching with crash recovery
+- Progress bar overlay during sync
+- Stale data italic rendering
+- Partial refresh (no flicker)
+- Double-press full refresh
+- Build-on-demand with auto version bump
+- Web Serial flashing
+
+### Not Yet Implemented
+- Bitmap complications
+- Progress bar complications
+- QR code complications
+- Custom button actions (HTTP POST)
+- Long press / double tap button actions
+- Haptic feedback
+- OTA firmware updates
+- Configurable WiFi (currently hardcoded)
+- Device registration
+- Offline indicator icon
 
 ---
 
@@ -392,6 +290,7 @@ The merged binary is then hosted on the server and referenced in the ESP Web Too
 |---------|------|-------|
 | 0.1 | 2026-02-06 | Initial draft (combined spec) |
 | 0.2 | 2026-02-07 | Clarified time handling on-device. Reduced fonts to minimal set. |
-| 0.3 | 2026-02-07 | Added: offline behavior, long press support, inherit from stock Watchy firmware, button-only wake. |
+| 0.3 | 2026-02-07 | Added: offline behavior, long press support, inherit from stock Watchy. |
 | 0.4 | 2026-02-07 | Added: double-tap support, full button action list, default mappings. |
-| 0.4.1 | 2026-02-11 | Split into separate firmware and web builder specs. Added Web Serial flashing section. |
+| 0.4.1 | 2026-02-11 | Split into separate firmware and web builder specs. Added Web Serial section. |
+| 0.5 | 2026-02-14 | Updated to match implemented firmware v0.2.x: single-file architecture, SPIFFS caching, progress bar sync, font mapping, partial refresh, double-press full refresh, build-on-demand, implemented vs planned tracking. |

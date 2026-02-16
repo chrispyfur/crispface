@@ -1,15 +1,52 @@
 {
     "id": "m365-calendar",
-    "name": "M365 Calendar",
+    "name": "Calendar Feed",
     "description": "Calendar events via ICS feed (works with Outlook, Google, Apple, etc.)",
     "script": "m365_calendar.py",
     "variables": [
-        {"name": "url", "label": "ICS Feed URL", "default": ""},
-        {"name": "events", "label": "Max Events", "default": "3"},
-        {"name": "days", "label": "Days Ahead", "default": "1"},
-        {"name": "detail", "label": "Detail (title/location/full)", "default": "title"},
-        {"name": "maxchars", "label": "Max Chars Per Line", "default": "20"}
+        {
+            "name": "url",
+            "label": "ICS Feed URL",
+            "type": "text",
+            "default": ""
+        },
+        {
+            "name": "events",
+            "label": "Max Events",
+            "type": "text",
+            "default": "3"
+        },
+        {
+            "name": "days",
+            "label": "Days Ahead",
+            "type": "text",
+            "default": "1"
+        },
+        {
+            "name": "detail",
+            "label": "Detail (title/location/full)",
+            "type": "text",
+            "default": "title"
+        },
+        {
+            "name": "maxchars",
+            "label": "Max Chars Per Line",
+            "type": "text",
+            "default": "20"
+        },
+        {
+            "name": "alert",
+            "label": "Alert before events",
+            "type": "checkbox",
+            "default": "false"
+        },
+        {
+            "name": "insistent",
+            "label": "Insistent alert",
+            "type": "checkbox",
+            "default": "false"
+        }
     ],
     "created_at": "2026-02-12T00:00:00+00:00",
-    "updated_at": "2026-02-12T00:00:00+00:00"
+    "updated_at": "2026-02-16T10:46:42.138966+00:00"
 }
