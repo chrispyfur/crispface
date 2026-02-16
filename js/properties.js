@@ -211,12 +211,9 @@
             html += '<input type="text" id="prop-id" value="' + escHtml(d.complication_id) + '" /></div>';
 
             if (!local && d.source) {
-                // Source + refresh (only for data-driven complications)
+                // Source (read-only info for data-driven complications)
                 html += '<div class="prop-row"><label for="prop-source">Source</label>';
                 html += '<input type="text" id="prop-source" value="' + escHtml(d.source) + '" /></div>';
-
-                html += '<div class="prop-row"><label for="prop-stale">Refresh (mins)</label>';
-                html += '<input type="number" id="prop-stale" value="' + (d.stale_seconds || 1) + '" min="1" /></div>';
             }
 
             html += '</div>'; // end .prop-advanced
@@ -541,12 +538,6 @@
             }
         });
 
-        // Stale (only bound if element exists — not present for local)
-        bindInput('prop-stale', function (val) {
-            if (currentObject.crispfaceData) {
-                currentObject.crispfaceData.stale_seconds = parseInt(val, 10) || 1;
-            }
-        });
     }
 
     function bindSteppers() {
