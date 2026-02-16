@@ -809,6 +809,14 @@ body.simulating .canvas-container-wrapper {
     border-top: 1px solid var(--gray-light);
 }
 
+/* Town verification status */
+.prop-town-status {
+    display: block;
+    font-size: 11px;
+    margin-top: 2px;
+    min-height: 14px;
+}
+
 /* Advanced toggle */
 .prop-advanced-toggle {
     font-size: 11px;

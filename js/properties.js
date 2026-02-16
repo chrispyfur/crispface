@@ -115,7 +115,12 @@
                     } else if (v.type === 'checkbox') {
                         html += '<input type="checkbox" id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input prop-var-checkbox"' + (currentVal === 'true' ? ' checked' : '') + ' /></div>';
                     } else {
-                        html += '<input type="text" id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input" value="' + escHtml(currentVal) + '" /></div>';
+                        html += '<input type="text" id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input" value="' + escHtml(currentVal) + '" />';
+                        // Town verification status for uk-weather
+                        if (d.complication_type === 'uk-weather' && v.name === 'town') {
+                            html += '<span class="prop-town-status" id="prop-town-status"></span>';
+                        }
+                        html += '</div>';
                     }
                 }
             } else if (!local && !ctype) {
@@ -341,6 +346,50 @@
                     } else {
                         input.addEventListener('input', handler);
                         input.addEventListener('change', handler);
+                    }
+
+                    // Town verification for uk-weather
+                    if (compTypeId === 'uk-weather' && varName === 'town') {
+                        (function (inp) {
+                            var verify = function () {
+                                var val = inp.value.trim();
+                                var status = document.getElementById('prop-town-status');
+                                if (!status || !val) { if (status) status.textContent = ''; return; }
+                                var xhr = new XMLHttpRequest();
+                                xhr.open('GET', '/crispface/api/sources/uk_town_lookup.py?q=' + encodeURIComponent(val));
+                                xhr.onload = function () {
+                                    if (!document.getElementById('prop-town-status')) return;
+                                    try {
+                                        var data = JSON.parse(xhr.responseText);
+                                        var exact = null;
+                                        for (var mi = 0; mi < (data.matches || []).length; mi++) {
+                                            if (data.matches[mi].name.toLowerCase() === val.toLowerCase()) {
+                                                exact = data.matches[mi];
+                                                break;
+                                            }
+                                        }
+                                        if (exact) {
+                                            status.textContent = exact.name + ', ' + exact.county;
+                                            status.style.color = '#43A047';
+                                        } else {
+                                            status.textContent = 'Not found';
+                                            status.style.color = '#E53935';
+                                        }
+                                    } catch (e) {
+                                        status.textContent = 'Error';
+                                        status.style.color = '#E53935';
+                                    }
+                                };
+                                xhr.onerror = function () {
+                                    var s = document.getElementById('prop-town-status');
+                                    if (s) { s.textContent = 'Error'; s.style.color = '#E53935'; }
+                                };
+                                xhr.send();
+                            };
+                            inp.addEventListener('blur', verify);
+                            // Verify on initial render
+                            if (inp.value.trim()) verify();
+                        })(input);
                     }
                 })(varInputs[i]);
             }
