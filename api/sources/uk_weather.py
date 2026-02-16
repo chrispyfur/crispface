@@ -7,7 +7,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
 CACHE_DIR = os.path.join(DATA_DIR, 'cache')
-CACHE_MAX_AGE = 1800  # 30 minutes
 
 TOWNS_FILE = os.path.join(DATA_DIR, 'uk_towns.json')
 
@@ -145,6 +144,11 @@ qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
 apikey = qs.get('apikey', [''])[0].strip()
 town_name = qs.get('town', ['Derby'])[0].strip()
 display = qs.get('display', ['summary'])[0].strip()
+try:
+    refresh_mins = int(qs.get('refresh', ['30'])[0])
+except ValueError:
+    refresh_mins = 30
+cache_max_age = max(5, refresh_mins) * 60  # minimum 5 minutes, convert to seconds
 
 # Validate
 if not apikey:
@@ -227,7 +231,7 @@ def get_cached():
     try:
         with open(cache_file, 'r') as f:
             cached = json.load(f)
-        if time.time() - cached.get('_fetched', 0) < CACHE_MAX_AGE:
+        if time.time() - cached.get('_fetched', 0) < cache_max_age:
             return cached
     except Exception:
         pass
