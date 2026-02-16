@@ -3,3 +3,7 @@ data/cache/
 data/users/
 data/users.json
 data/weather_cache.json
+firmware/.pio/
+firmware/include/config.h
+firmware-builds/*.bin
+firmware-builds/*.manifest.json

@@ -7,17 +7,39 @@
 
     var FONT_FAMILIES = [
         { value: 'sans-serif', label: 'Sans' },
+        { value: 'serif', label: 'Serif' },
         { value: 'monospace', label: 'Mono' }
     ];
 
-    var FONT_SIZES = [8, 12, 16, 24, 48];
+    // Stored values map to Adafruit GFX pt sizes on the watch.
+    // Drop 8px from the dropdown (same as 12 on watch). Legacy 8 still renders.
+    var FONT_SIZES = [
+        { value: 12, label: 'Small (9pt)' },
+        { value: 16, label: 'Medium (12pt)' },
+        { value: 24, label: 'Large (18pt)' },
+        { value: 48, label: 'X-Large (24pt)' },
+        { value: 72, label: 'Huge (48pt)' }
+    ];
+
+    // Map stored editor px → GFX getTextBounds("Ay") height for FreeSans at that pt size.
+    // Ensures editor text fills the same vertical space as on the watch.
+    var DISPLAY_SIZE_MAP = { 8: 17, 12: 17, 16: 23, 24: 34, 48: 44, 72: 89 };
 
     var ALIGNS = ['left', 'center', 'right'];
+
+    // Compute text inset from border + padding (0 when no border)
+    function getInset(d) {
+        var bw = d.border_width || 0;
+        if (bw <= 0) return 0;
+        return bw + (d.border_padding || 0);
+    }
 
     // Expose for properties.js
     window.CRISPFACE.FONT_FAMILIES = FONT_FAMILIES;
     window.CRISPFACE.FONT_SIZES = FONT_SIZES;
+    window.CRISPFACE.DISPLAY_SIZE_MAP = DISPLAY_SIZE_MAP;
     window.CRISPFACE.ALIGNS = ALIGNS;
+    window.CRISPFACE.getInset = getInset;
 
     // Migrate old combined font spec (e.g. "sans-12") to separate fields
     function migrateContent(content) {
@@ -77,7 +99,7 @@
             enforceBounds(obj);
         });
 
-        // Snap on scale/resize
+        // Snap on scale/resize — sync both w and h to crispfaceData
         canvas.on('object:scaling', function (e) {
             var obj = e.target;
             var w = Math.round(obj.width * obj.scaleX);
@@ -90,6 +112,13 @@
                 left: Math.round(obj.left),
                 top: Math.round(obj.top)
             });
+            if (obj.crispfaceData) {
+                var inset = getInset(obj.crispfaceData);
+                obj.crispfaceData.h = h + inset * 2; // store outer height
+                if (obj.clipPath) {
+                    obj.clipPath.set({ width: w, height: h });
+                }
+            }
             enforceBounds(obj);
         });
 
@@ -110,6 +139,47 @@
             }
         });
 
+        // Draw complication borders after canvas render
+        canvas.on('after:render', function () {
+            var ctx = canvas.getContext('2d');
+            canvas.getObjects().forEach(function (obj) {
+                if (!obj.crispfaceData) return;
+                var d = obj.crispfaceData;
+                var bw = d.border_width || 0;
+                if (bw <= 0) return;
+
+                var br = d.border_radius || 0;
+                var col = (d.content && d.content.color === 'white') ? '#ffffff' : '#000000';
+                var ins = getInset(d);
+                var x = Math.round(obj.left) - ins;
+                var y = Math.round(obj.top) - ins;
+                var w = Math.round(obj.width * (obj.scaleX || 1)) + ins * 2;
+                var h = d.h || Math.round(obj.height * (obj.scaleY || 1));
+
+                ctx.save();
+                ctx.strokeStyle = col;
+                ctx.lineWidth = bw;
+                if (br > 0) {
+                    var r = Math.min(br, w / 2, h / 2);
+                    ctx.beginPath();
+                    ctx.moveTo(x + r, y);
+                    ctx.lineTo(x + w - r, y);
+                    ctx.arcTo(x + w, y, x + w, y + r, r);
+                    ctx.lineTo(x + w, y + h - r);
+                    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+                    ctx.lineTo(x + r, y + h);
+                    ctx.arcTo(x, y + h, x, y + h - r, r);
+                    ctx.lineTo(x, y + r);
+                    ctx.arcTo(x, y, x + r, y, r);
+                    ctx.closePath();
+                    ctx.stroke();
+                } else {
+                    ctx.strokeRect(x + bw / 2, y + bw / 2, w - bw, h - bw);
+                }
+                ctx.restore();
+            });
+        });
+
         // Load existing complications
         loadFace(CF.faceData);
 
@@ -119,29 +189,30 @@
         startLivePolling();
     }
 
-    // Enforce canvas bounds
+    // Enforce canvas bounds (uses outer complication bounds including border+padding)
     function enforceBounds(obj) {
-        var bound = obj.getBoundingRect();
-        var w = bound.width;
-        var h = bound.height;
+        var inset = obj.crispfaceData ? getInset(obj.crispfaceData) : 0;
+        var fabricW = Math.round(obj.width * (obj.scaleX || 1));
+        var outerH = obj.crispfaceData ? obj.crispfaceData.h : Math.round(obj.height * (obj.scaleY || 1));
 
-        if (obj.left < 0) obj.set('left', 0);
-        if (obj.top < 0) obj.set('top', 0);
-        if (obj.left + w > 200) obj.set('left', Math.max(0, 200 - w));
-        if (obj.top + h > 200) obj.set('top', Math.max(0, 200 - h));
+        if (obj.left - inset < 0) obj.set('left', inset);
+        if (obj.top - inset < 0) obj.set('top', inset);
+        if (obj.left + fabricW + inset > 200) obj.set('left', Math.max(inset, 200 - fabricW - inset));
+        if (obj.top - inset + outerH > 200) obj.set('top', Math.max(inset, 200 - outerH + inset));
     }
 
-    // Get crispface data from currently selected object
+    // Get crispface data from currently selected object (returns outer bounds)
     function getSelectedComplication() {
         var obj = canvas.getActiveObject();
         if (!obj || !obj.crispfaceData) return null;
+        var inset = getInset(obj.crispfaceData);
         return {
             object: obj,
             data: obj.crispfaceData,
-            left: Math.round(obj.left),
-            top: Math.round(obj.top),
-            width: Math.round(obj.width * (obj.scaleX || 1)),
-            height: obj.crispfaceData.h || Math.round(obj.height * (obj.scaleY || 1))
+            left: Math.round(obj.left) - inset,
+            top: Math.round(obj.top) - inset,
+            width: Math.round(obj.width * (obj.scaleX || 1)) + inset * 2,
+            height: obj.crispfaceData.h
         };
     }
 
@@ -156,11 +227,20 @@
         var fontWeight = content.bold ? 'bold' : 'normal';
         var fontStyle = content.italic ? 'italic' : 'normal';
 
+        var storedSize = content.size || 12;
+        var displaySize = DISPLAY_SIZE_MAP[storedSize] || storedSize;
+
+        var compH = data.h || 40;
+        var inset = (data.border_width || 0) > 0 ? (data.border_width || 0) + (data.border_padding || 0) : 0;
+        var innerW = Math.max((data.w || 80) - inset * 2, 1);
+        var innerH = Math.max(compH - inset * 2, 1);
+
         var text = new fabric.Textbox(content.value || 'Text', {
-            left: data.x || 10,
-            top: data.y || 10,
-            width: data.w || 80,
-            fontSize: content.size || 12,
+            left: (data.x || 10) + inset,
+            top: (data.y || 10) + inset,
+            width: innerW,
+            height: innerH,
+            fontSize: displaySize,
             fontFamily: content.family || 'sans-serif',
             fontWeight: fontWeight,
             fontStyle: fontStyle,
@@ -182,10 +262,14 @@
             complication_id: data.complication_id || ('comp_' + nextCompId++),
             complication_type: data.complication_type || '',
             type: 'text',
-            h: data.h || 40,
+            h: compH,
             stale_seconds: data.stale_seconds || 60,
+            stale_enabled: data.stale_enabled !== false,
             source: content.source || '',
             params: data.params || {},
+            border_width: data.border_width || 0,
+            border_radius: data.border_radius || 0,
+            border_padding: data.border_padding || 0,
             content: {
                 value: content.value || 'Text',
                 family: content.family || 'sans-serif',
@@ -196,6 +280,31 @@
                 color: fgName
             }
         };
+
+        // Clip text rendering to inner bounds (prevents overflow past padding)
+        text.clipPath = new fabric.Rect({
+            width: innerW,
+            height: innerH,
+            originX: 'center',
+            originY: 'center'
+        });
+
+        // Override initDimensions so Fabric.js doesn't auto-recalculate height
+        var origInitDimensions = text.initDimensions.bind(text);
+        text.initDimensions = function () {
+            origInitDimensions();
+            var ins = getInset(this.crispfaceData);
+            this.height = Math.max(this.crispfaceData.h - ins * 2, 1);
+            // Keep clipPath in sync with inner dimensions
+            if (this.clipPath) {
+                this.clipPath.set({
+                    width: Math.max(this.width, 1),
+                    height: this.height
+                });
+            }
+        };
+        text.height = innerH;
+        text.setCoords();
 
         canvas.add(text);
         canvas.setActiveObject(text);
@@ -224,10 +333,91 @@
     // Populate left sidebar fields from face data
     function populateSidebar(face) {
         document.getElementById('face-name').value = face.name || '';
-        document.getElementById('face-slug').value = face.slug || '';
-        document.getElementById('face-stale').value = face.stale_seconds || 60;
         var bgSelect = document.getElementById('face-background');
         bgSelect.value = face.background || 'black';
+
+        updateRefreshList(face);
+    }
+
+    // Format seconds into human-readable interval
+    function formatInterval(seconds) {
+        if (seconds <= 0) return 'never';
+        if (seconds < 60) return seconds + 's';
+        if (seconds < 3600) return Math.round(seconds / 60) + 'min';
+        if (seconds < 86400) return Math.round(seconds / 3600) + 'hr';
+        return Math.round(seconds / 86400) + 'd';
+    }
+
+    // Show each complication's refresh interval in the sidebar
+    function updateRefreshList(face) {
+        var listEl = document.getElementById('face-refresh-list');
+        if (!listEl) return;
+        var complications = face.complications || [];
+        var LOCAL_TYPES = { time: true, date: true, battery: true };
+
+        var items = [];
+        for (var i = 0; i < complications.length; i++) {
+            var c = complications[i];
+            var cType = c.complication_type || c.complication_id || '';
+            var isLocal = LOCAL_TYPES[cType] || false;
+            var name = cType || c.complication_id || 'comp ' + (i + 1);
+            if (isLocal) {
+                items.push({ name: name, freq: 'local' });
+            } else {
+                var stale = c.stale_enabled !== false ? (c.stale_seconds || 60) : -1;
+                items.push({ name: name, freq: stale > 0 ? formatInterval(stale) : 'never' });
+            }
+        }
+
+        if (items.length === 0) {
+            listEl.innerHTML = '<span class="no-selection">No complications</span>';
+            return;
+        }
+
+        var html = '<table class="refresh-table">';
+        for (var j = 0; j < items.length; j++) {
+            html += '<tr><td>' + CF.escHtml(items[j].name) + '</td>' +
+                '<td>' + items[j].freq + '</td></tr>';
+        }
+        html += '</table>';
+        listEl.innerHTML = html;
+    }
+
+    // Load face list and populate the face navigation dropdown
+    function loadFaceDropdown(currentId) {
+        var select = document.getElementById('face-select');
+        if (!select) return;
+
+        // Preserve watch param when navigating between faces
+        var urlParams = new URLSearchParams(window.location.search);
+        var watchParam = urlParams.get('watch') || '';
+
+        CF.api('GET', '/api/faces.py').then(function (resp) {
+            if (!resp.success || !resp.faces) {
+                select.innerHTML = '<option>' + (CF.faceData.name || 'Current') + '</option>';
+                return;
+            }
+            select.innerHTML = '';
+            var faces = resp.faces;
+            for (var i = 0; i < faces.length; i++) {
+                var opt = document.createElement('option');
+                opt.value = faces[i].id;
+                opt.textContent = faces[i].name || faces[i].id;
+                if (faces[i].id === currentId) opt.selected = true;
+                select.appendChild(opt);
+            }
+        }).catch(function () {
+            select.innerHTML = '<option>' + (CF.faceData.name || 'Current') + '</option>';
+        });
+
+        select.addEventListener('change', function () {
+            var newId = select.value;
+            if (newId && newId !== CF.faceId) {
+                var url = CF.baseUrl + '/editor.html?id=' + newId;
+                if (watchParam) url += '&watch=' + watchParam;
+                window.location.href = url;
+            }
+        });
     }
 
     // Serialize canvas to spec-format JSON
@@ -251,15 +441,20 @@
             };
             if (d.source) contentOut.source = d.source;
 
+            var inset = getInset(d);
             var comp = {
                 complication_id: d.complication_id,
                 complication_type: d.complication_type || '',
                 type: d.type,
-                x: Math.round(obj.left),
-                y: Math.round(obj.top),
-                w: Math.round(obj.width * (obj.scaleX || 1)),
-                h: d.h || Math.round(obj.height * (obj.scaleY || 1)),
+                x: Math.round(obj.left) - inset,
+                y: Math.round(obj.top) - inset,
+                w: Math.round(obj.width * (obj.scaleX || 1)) + inset * 2,
+                h: d.h,
                 stale_seconds: d.stale_seconds,
+                stale_enabled: d.stale_enabled !== false,
+                border_width: d.border_width || 0,
+                border_radius: d.border_radius || 0,
+                border_padding: d.border_padding || 0,
                 content: contentOut,
                 sort_order: i
             };
@@ -272,9 +467,7 @@
         return {
             id: CF.faceId,
             name: document.getElementById('face-name').value,
-            slug: document.getElementById('face-slug').value,
             background: document.getElementById('face-background').value,
-            stale_seconds: parseInt(document.getElementById('face-stale').value, 10) || 60,
             complications: complications
         };
     }
@@ -778,6 +971,7 @@
                 initCanvas();
                 bindToolbar();
                 loadComplicationTypes();
+                loadFaceDropdown(faceId);
 
                 // Expose for properties.js and debugging
                 window.CRISPFACE.canvas = canvas;

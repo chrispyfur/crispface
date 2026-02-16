@@ -96,6 +96,8 @@ def save_face(face_id, data, user):
         existing['background'] = data['background']
     if 'stale_seconds' in data:
         existing['stale_seconds'] = max(1, int(data.get('stale_seconds', 60)))
+    if 'stale_enabled' in data:
+        existing['stale_enabled'] = bool(data['stale_enabled'])
 
     if 'complications' in data:
         validated = []
@@ -111,11 +113,16 @@ def save_face(face_id, data, user):
 
 
 def delete_face(face_id, user):
-    """Delete a face file."""
+    """Delete a face file and remove from all watches."""
     path = _face_path(face_id, user)
     if not path or not os.path.exists(path):
         return False
     os.remove(path)
+    # Remove face_id from any watches that reference it
+    for watch in get_all_watches(user):
+        if face_id in watch.get('face_ids', []):
+            watch['face_ids'] = [fid for fid in watch['face_ids'] if fid != face_id]
+            _write_watch(watch['id'], watch, user)
     return True
 
 
@@ -131,7 +138,7 @@ def _validate_complication(c):
     content = c.get('content', {})
     validated_content = {
         'value': str(content.get('value', ''))[:200],
-        'family': str(content.get('family', 'sans-serif')),
+        'family': content.get('family', 'sans-serif') if content.get('family') in ('sans-serif', 'serif', 'monospace') else 'sans-serif',
         'size': int(content.get('size', 12)),
         'bold': bool(content.get('bold', False)),
         'italic': bool(content.get('italic', False)),
@@ -153,6 +160,10 @@ def _validate_complication(c):
         'w': int(c.get('w', 80)),
         'h': int(c.get('h', 40)),
         'stale_seconds': max(1, int(c.get('stale_seconds', 60))),
+        'stale_enabled': bool(c.get('stale_enabled', True)),
+        'border_width': max(0, min(5, int(c.get('border_width', 0)))),
+        'border_radius': max(0, min(20, int(c.get('border_radius', 0)))),
+        'border_padding': max(0, min(20, int(c.get('border_padding', 0)))),
         'content': validated_content,
         'sort_order': int(c.get('sort_order', 0))
     }
@@ -265,11 +276,15 @@ def save_type(type_id, data):
         validated_vars = []
         for v in data['variables']:
             if isinstance(v, dict) and v.get('name'):
-                validated_vars.append({
+                var_entry = {
                     'name': re.sub(r'[^a-zA-Z0-9_]', '', str(v['name']))[:50],
                     'label': str(v.get('label', v['name']))[:100],
+                    'type': re.sub(r'[^a-z]', '', str(v.get('type', 'text')))[:20],
                     'default': str(v.get('default', ''))[:200]
-                })
+                }
+                if v.get('options'):
+                    var_entry['options'] = re.sub(r'[^a-zA-Z0-9_,]', '', str(v['options']))[:500]
+                validated_vars.append(var_entry)
         existing['variables'] = validated_vars
 
     # Save script source if provided
@@ -368,6 +383,8 @@ def create_watch(name, user):
         'id': watch_id,
         'name': str(name)[:100].strip() or 'Untitled Watch',
         'face_ids': [],
+        'wifi_networks': [],
+        'timezone': 'Europe/London',
         'created_at': now,
         'updated_at': now
     }
@@ -391,6 +408,22 @@ def save_watch(watch_id, data, user):
             if safe and safe not in validated:
                 validated.append(safe)
         existing['face_ids'] = validated
+
+    if 'timezone' in data:
+        tz = str(data['timezone']).strip()[:50]
+        if tz:
+            existing['timezone'] = tz
+
+    if 'wifi_networks' in data and isinstance(data['wifi_networks'], list):
+        validated_nets = []
+        for net in data['wifi_networks'][:5]:  # max 5 networks
+            if not isinstance(net, dict):
+                continue
+            ssid = str(net.get('ssid', '')).strip()[:32]
+            password = str(net.get('password', '')).strip()[:63]
+            if ssid:
+                validated_nets.append({'ssid': ssid, 'password': password})
+        existing['wifi_networks'] = validated_nets
 
     existing['updated_at'] = _now_iso()
     _write_watch(watch_id, existing, user)

@@ -1,0 +1,19 @@
+#ifndef CRISPFACE_CONFIG_H
+#define CRISPFACE_CONFIG_H
+
+#define CRISPFACE_VERSION    "0.2.0"
+#define CRISPFACE_SERVER     "https://your-server.example.com"
+#define CRISPFACE_API_PATH   "/crispface/api/watch_faces.py"
+#define CRISPFACE_WATCH_ID   "your_watch_id"
+#define CRISPFACE_API_TOKEN  "your_api_token"
+#define CRISPFACE_FACES_DIR  "/faces"
+#define CRISPFACE_HTTP_TIMEOUT 15000
+#define CRISPFACE_GMT_OFFSET 0
+
+// WiFi networks — build_firmware.php injects per-watch values at build time.
+// Firmware scans available networks and connects to the strongest known one.
+#define CRISPFACE_WIFI_COUNT 1
+#define CRISPFACE_WIFI_SSID_0 "YourSSID"
+#define CRISPFACE_WIFI_PASS_0 "YourPassword"
+
+#endif

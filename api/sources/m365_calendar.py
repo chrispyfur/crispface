@@ -17,6 +17,8 @@ max_events = int(qs.get('events', ['3'])[0])
 days_ahead = int(qs.get('days', ['1'])[0])
 detail = qs.get('detail', ['title'])[0]
 max_chars = int(qs.get('maxchars', ['20'])[0])
+alert_enabled = qs.get('alert', ['false'])[0].lower() == 'true'
+insistent_enabled = qs.get('insistent', ['false'])[0].lower() == 'true'
 
 if max_events < 1:
     max_events = 1
@@ -98,6 +100,8 @@ def parse_ics_events(ics_text):
                 event['location'] = value
             elif prop_name == 'DESCRIPTION':
                 event['description'] = value.replace('\\n', '\n').replace('\\,', ',')
+            elif prop_name == 'TRANSP':
+                event['transp'] = value.strip().upper()
 
     return events
 
@@ -144,9 +148,10 @@ def format_events(events, detail, max_chars):
     for ev in events:
         subject = ev.get('summary', 'No title')
 
-        # Prefix: filled circle for all-day, time for timed
+        # Prefix: all-day gets * (busy) or o (free), timed gets HH:MM
         if ev.get('all_day'):
-            prefix = '\u25cf'
+            is_free = ev.get('transp') == 'TRANSPARENT'
+            prefix = 'o' if is_free else '*'
         else:
             prefix = ev['dtstart'].strftime('%H:%M')
 
@@ -231,4 +236,30 @@ events = parse_ics_events(ics_text)
 start, end = calc_time_window(days_ahead)
 events = filter_and_sort_events(events, start, end, max_events)
 value_text = format_events(events, detail, max_chars)
-respond({'value': value_text})
+
+result = {'value': value_text}
+
+# Build alerts array when alert or insistent is enabled
+if alert_enabled or insistent_enabled:
+    now = datetime.now(timezone.utc)
+    alerts = []
+    for ev in events:
+        # Skip all-day events and past events
+        if ev.get('all_day'):
+            continue
+        dt = ev.get('dtstart')
+        if not dt or dt <= now:
+            continue
+        minutes_from_now = int((dt - now).total_seconds() / 60)
+        if minutes_from_now <= 0:
+            continue
+        alerts.append({
+            'min': minutes_from_now,
+            'text': ev.get('summary', 'Event')[:39],
+            'ins': insistent_enabled
+        })
+    # Sort by nearest first, cap at 10
+    alerts.sort(key=lambda a: a['min'])
+    result['alerts'] = alerts[:10]
+
+respond(result)

@@ -1,0 +1,12 @@
+{
+    "name": "CrispFace",
+    "version": "0.2.1",
+    "builds": [
+        {
+            "chipFamily": "ESP32-S3",
+            "parts": [
+                { "path": "crispface-firmware.bin", "offset": 0 }
+            ]
+        }
+    ]
+}

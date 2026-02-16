@@ -20,6 +20,7 @@
             <li><a href="/crispface/dashboard.html">Dashboard</a></li>
             <li><a href="/crispface/faces.html">Faces</a></li>
             <li><a href="/crispface/complications.html">Complications</a></li>
+            <li><a href="/crispface/flash.html">Flash</a></li>
         </ul>
         <div class="sidebar-user">
             <span id="sidebar-user"></span> &middot;
@@ -42,6 +43,20 @@
                 <input type="text" id="watch-edit-name" value="" />
             </div>
 
+            <div class="form-group">
+                <label for="watch-timezone">Timezone</label>
+                <select id="watch-timezone"></select>
+            </div>
+
+            <div class="comp-variables-section">
+                <div class="comp-variables-header">
+                    <h2>WiFi Networks</h2>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-add-wifi">Add Network</button>
+                </div>
+                <p class="wifi-hint">The watch will scan for available networks and connect to the strongest known one.</p>
+                <div id="wifi-list"></div>
+            </div>
+
             <div class="comp-variables-section">
                 <div class="comp-variables-header">
                     <h2>Faces in this Watch</h2>
@@ -58,6 +73,6 @@
         </div>
     </main>
 </div>
-<script src="/crispface/js/app.js"></script>
+<script src="/crispface/js/app.js?v=3"></script>
 </body>
 </html>

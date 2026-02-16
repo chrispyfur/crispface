@@ -1,0 +1,12 @@
+{
+    "name": "Watchy Stock",
+    "version": "1.0.0",
+    "builds": [
+        {
+            "chipFamily": "ESP32-S3",
+            "parts": [
+                { "path": "stock-firmware.bin", "offset": 0 }
+            ]
+        }
+    ]
+}

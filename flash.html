@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flash Firmware - CrispFace</title>
+    <link rel="stylesheet" href="/crispface/css/styles.css" />
+    <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</head>
+<body data-page="flash">
+<div class="layout">
+    <nav class="sidebar">
+        <div class="sidebar-brand" id="sidebar-brand">
+            <span id="watch-name">CrispFace</span>
+            <div class="sidebar-brand-links">
+                <a href="#" id="brand-edit">Edit</a>
+                <a href="#" id="brand-new">+ New</a>
+            </div>
+        </div>
+        <ul class="sidebar-nav">
+            <li><a href="/crispface/dashboard.html">Dashboard</a></li>
+            <li><a href="/crispface/faces.html">Faces</a></li>
+            <li><a href="/crispface/complications.html">Complications</a></li>
+            <li><a href="/crispface/flash.html" class="active">Flash</a></li>
+        </ul>
+        <div class="sidebar-user">
+            <span id="sidebar-user"></span> &middot;
+            <a href="#" id="btn-logout">Log out</a>
+        </div>
+    </nav>
+    <main class="main-content">
+        <div class="page-header">
+            <h1>Flash Firmware</h1>
+        </div>
+
+        <div class="browser-note">
+            Requires <strong>Chrome</strong> or <strong>Edge</strong> 89+ with Web Serial API support.
+        </div>
+
+        <div class="flash-section">
+            <div class="flash-watch-picker" id="flash-watch-picker" style="display:none;">
+                <label for="flash-watch-select">Build for watch</label>
+                <select id="flash-watch-select"></select>
+                <div class="flash-wifi-info" id="flash-wifi-info"></div>
+            </div>
+
+            <div class="firmware-picker">
+                <label class="firmware-option firmware-option-selected">
+                    <input type="radio" name="firmware" value="watchy" checked />
+                    <span class="firmware-label">CrispFace</span>
+                    <span class="firmware-desc">Watch face editor with server sync</span>
+                </label>
+                <label class="firmware-option">
+                    <input type="radio" name="firmware" value="stock" />
+                    <span class="firmware-label">Watchy Stock</span>
+                    <span class="firmware-desc">Basic time, date, battery</span>
+                </label>
+            </div>
+
+            <button type="button" class="btn-flash" id="btn-build">Build</button>
+            <div id="flash-status"></div>
+
+            <!-- Flash button appears after successful build -->
+            <div id="flash-wrap" style="display:none; margin-top: 16px;">
+                <esp-web-install-button id="install-btn" manifest="">
+                    <button slot="activate" class="btn-flash">Flash to Watchy</button>
+                    <span slot="unsupported">
+                        <p style="color: var(--danger); font-size: 14px;">Your browser does not support Web Serial.</p>
+                    </span>
+                </esp-web-install-button>
+            </div>
+
+            <button type="button" class="btn-test" id="btn-test">Test Connection</button>
+
+            <div class="flash-log" id="flash-log">
+                <div class="flash-log-header">
+                    <h3>Flash History</h3>
+                    <a href="#" id="flash-log-all">View all</a>
+                </div>
+                <div id="flash-log-entries"></div>
+            </div>
+        </div>
+
+        <div class="hint-section">
+            <h2>Flashing Guide</h2>
+
+            <h3>Entering bootloader (flash mode)</h3>
+            <table class="hint-table">
+                <tr>
+                    <td>Normal</td>
+                    <td>Just plug in USB, click Build, then Flash to Watchy. The web flasher enters the bootloader automatically.</td>
+                </tr>
+                <tr>
+                    <td>If stuck</td>
+                    <td>Hold both top buttons (top-left + top-right) for 4+ seconds, then release top-left first, then top-right.</td>
+                </tr>
+            </table>
+
+            <h3>Resetting the watch</h3>
+            <table class="hint-table">
+                <tr>
+                    <td>Reset</td>
+                    <td>Hold both top buttons for 4+ seconds, then release top-right first, then top-left.</td>
+                </tr>
+            </table>
+            <p class="hint-note">Same two buttons, different release order &mdash; release top-left first for bootloader, release top-right first for reset.</p>
+        </div>
+
+        <div class="hint-section">
+            <h2>Watch Buttons</h2>
+
+            <div class="watch-diagram">
+                <div class="btn-col btn-col-left">
+                    <div class="watch-btn"><span class="watch-btn-label">Sync</span><span class="watch-btn-pip"></span></div>
+                    <div class="watch-btn"><span class="watch-btn-label">Menu</span><span class="watch-btn-pip"></span></div>
+                </div>
+                <div class="watch-body">200 x 200<br/>e-paper</div>
+                <div class="btn-col btn-col-right">
+                    <div class="watch-btn"><span class="watch-btn-pip"></span><span class="watch-btn-label">Prev</span></div>
+                    <div class="watch-btn"><span class="watch-btn-pip"></span><span class="watch-btn-label">Next</span></div>
+                </div>
+            </div>
+
+            <h3>CrispFace controls</h3>
+            <table class="hint-table">
+                <tr>
+                    <td>Bottom-left</td>
+                    <td>Open Watchy system menu (WiFi, time, etc.)</td>
+                </tr>
+                <tr>
+                    <td>Top-left</td>
+                    <td>Force sync faces from server</td>
+                </tr>
+                <tr>
+                    <td>Top-right</td>
+                    <td>Previous face</td>
+                </tr>
+                <tr>
+                    <td>Bottom-right</td>
+                    <td>Next face</td>
+                </tr>
+            </table>
+
+            <h3>First-time setup</h3>
+            <table class="hint-table">
+                <tr>
+                    <td>1. Flash</td>
+                    <td>Build and flash CrispFace firmware above</td>
+                </tr>
+                <tr>
+                    <td>2. Sync</td>
+                    <td>WiFi networks are configured per watch &mdash; faces sync on boot, or press top-left</td>
+                </tr>
+                <tr>
+                    <td>3. Browse</td>
+                    <td>Press top-right / bottom-right to switch faces</td>
+                </tr>
+            </table>
+            <p class="hint-note">Faces auto-refresh when stale. Server data in <em>italic</em> means it's overdue for a refresh.</p>
+        </div>
+    </main>
+</div>
+<script src="/crispface/js/app.js?v=3"></script>
+</body>
+</html>

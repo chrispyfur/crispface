@@ -496,12 +496,35 @@ For `custom` actions, specify the endpoint:
 
 ---
 
+## Implementation Status
+
+### Implemented
+- Face editor: 200x200 Fabric.js canvas with text complications
+- Complication positioning, resizing, font/size/bold/alignment/colour
+- Face CRUD and watch CRUD (flat-file JSON)
+- Complication library: time, date, weather, sample word sources
+- Watch faces API endpoint with Bearer auth and server-side resolution
+- Build-on-demand firmware compilation (`api/build_firmware.php`)
+- Web Serial flashing page (`flash.html`) with Test Connection, Build, Flash buttons
+
+### Not Yet Implemented
+- Bitmap tools (image import, pixel editor, dithering)
+- Progress bar and QR code complication types
+- Visual button mapper in editor
+- Haptic feedback configuration
+- Multi-device management UI
+- Device sync status dashboard
+- Icon library
+
+---
+
 ## Future Considerations
 
-- **Downloadable fonts**: Fetch additional fonts from server
-- **OTA updates**: Firmware updates pushed via server
+- **Bitmap complications**: Image import with 1-bit dithering
+- **Downloadable fonts**: Upload custom fonts for use in faces
+- **OTA updates**: Push firmware updates from web UI
 - **Step counter integration**: Report steps to server, display in complications
-- **Web Serial firmware flasher**: Browser-based initial device provisioning (see firmware spec)
+- **Multi-device dashboard**: Sync status, battery, firmware version per device
 
 ---
 
@@ -514,3 +537,4 @@ For `custom` actions, specify the endpoint:
 | 0.3 | 2026-02-07 | Added: offline behavior, long press support, inherit from stock Watchy firmware, button-only wake. |
 | 0.4 | 2026-02-07 | Added: double-tap support, full button action list, default mappings, button config in web builder, multi-device support. |
 | 0.4.1 | 2026-02-11 | Split into separate web builder and firmware specs. |
+| 0.5 | 2026-02-14 | Added implementation status. Web Serial flashing now implemented. |

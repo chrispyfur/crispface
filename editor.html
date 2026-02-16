@@ -20,6 +20,7 @@
             <li><a href="/crispface/dashboard.html">Dashboard</a></li>
             <li><a href="/crispface/faces.html">Faces</a></li>
             <li><a href="/crispface/complications.html">Complications</a></li>
+            <li><a href="/crispface/flash.html">Flash</a></li>
         </ul>
         <div class="sidebar-user">
             <span id="sidebar-user"></span> &middot;
@@ -32,12 +33,12 @@
             <div class="editor-sidebar-left">
                 <h3>Face Settings</h3>
                 <div class="prop-row">
-                    <label for="face-name">Name</label>
-                    <input type="text" id="face-name" value="" />
+                    <label for="face-select">Face</label>
+                    <select id="face-select"><option>Loading...</option></select>
                 </div>
                 <div class="prop-row">
-                    <label for="face-slug">Slug</label>
-                    <input type="text" id="face-slug" value="" />
+                    <label for="face-name">Name</label>
+                    <input type="text" id="face-name" value="" />
                 </div>
                 <div class="prop-row">
                     <label for="face-background">Background</label>
@@ -47,8 +48,8 @@
                     </select>
                 </div>
                 <div class="prop-row">
-                    <label for="face-stale">Stale (seconds)</label>
-                    <input type="number" id="face-stale" value="60" min="1" />
+                    <label>Refresh intervals</label>
+                    <div id="face-refresh-list" class="refresh-list"><span class="no-selection">No complications</span></div>
                 </div>
             </div>
 
@@ -79,9 +80,9 @@
     </main>
 </div>
 
-<script src="/crispface/js/app.js"></script>
+<script src="/crispface/js/app.js?v=3"></script>
 <script src="/crispface/js/fabric.min.js"></script>
-<script src="/crispface/js/editor.js"></script>
-<script src="/crispface/js/properties.js"></script>
+<script src="/crispface/js/editor.js?v=3"></script>
+<script src="/crispface/js/properties.js?v=3"></script>
 </body>
 </html>

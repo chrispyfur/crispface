@@ -395,7 +395,7 @@
 
                 // Add variable button
                 document.getElementById('btn-add-var').addEventListener('click', function () {
-                    addVariableRow('', '', '');
+                    addVariableRow('', '', '', 'text');
                 });
 
                 // Toggle script editor
@@ -451,33 +451,42 @@
         list.innerHTML = '';
         if (variables.length > 0) {
             var header = document.createElement('div');
-            header.className = 'var-row var-row-header';
+            header.className = 'var-row-header';
             header.innerHTML =
                 '<span class="var-col-label">Name</span>' +
                 '<span class="var-col-label">Label</span>' +
+                '<span class="var-col-label var-col-type">Type</span>' +
                 '<span class="var-col-label">Default</span>' +
+                '<span class="var-col-label">Options</span>' +
                 '<span class="var-col-spacer"></span>';
             list.appendChild(header);
             for (var i = 0; i < variables.length; i++) {
-                addVariableRow(variables[i].name, variables[i].label, variables[i].default);
+                addVariableRow(variables[i].name, variables[i].label, variables[i].default, variables[i].type || 'text', variables[i].options || '');
             }
         } else {
             list.innerHTML = '<p class="no-selection">No variables defined</p>';
         }
     }
 
-    function addVariableRow(name, label, defaultVal) {
+    function addVariableRow(name, label, defaultVal, varType, options) {
         var list = document.getElementById('variables-list');
         // Remove "no variables" message if present
         var noVars = list.querySelector('.no-selection');
         if (noVars) noVars.remove();
 
+        var type = varType || 'text';
         var row = document.createElement('div');
         row.className = 'var-row';
         row.innerHTML =
             '<input type="text" placeholder="name" class="var-name" value="' + escHtml(name || '') + '" />' +
             '<input type="text" placeholder="label" class="var-label" value="' + escHtml(label || '') + '" />' +
+            '<select class="var-type">' +
+                '<option value="text"' + (type === 'text' ? ' selected' : '') + '>Text</option>' +
+                '<option value="checkbox"' + (type === 'checkbox' ? ' selected' : '') + '>Checkbox</option>' +
+                '<option value="select"' + (type === 'select' ? ' selected' : '') + '>Select</option>' +
+            '</select>' +
             '<input type="text" placeholder="default" class="var-default" value="' + escHtml(defaultVal || '') + '" />' +
+            '<input type="text" placeholder="a,b,c" class="var-options" value="' + escHtml(options || '') + '" />' +
             '<button type="button" class="btn btn-danger btn-sm var-remove">&times;</button>';
 
         row.querySelector('.var-remove').addEventListener('click', function () {
@@ -494,19 +503,60 @@
         var rows = document.querySelectorAll('.var-row');
         var variables = [];
         for (var i = 0; i < rows.length; i++) {
-            var name = rows[i].querySelector('.var-name').value.trim();
+            var nameEl = rows[i].querySelector('.var-name');
+            if (!nameEl) continue;
+            var name = nameEl.value.trim();
             if (!name) continue;
-            variables.push({
+            var typeEl = rows[i].querySelector('.var-type');
+            var varType = typeEl ? typeEl.value : 'text';
+            var v = {
                 name: name,
                 label: rows[i].querySelector('.var-label').value.trim() || name,
+                type: varType,
                 default: rows[i].querySelector('.var-default').value
-            });
+            };
+            var optionsEl = rows[i].querySelector('.var-options');
+            if (optionsEl && optionsEl.value.trim()) {
+                v.options = optionsEl.value.trim();
+            }
+            variables.push(v);
         }
         return variables;
     }
 
     // ---- Watch edit page ----
     var watchFaceIds = []; // current ordered face IDs for the watch being edited
+    var watchWifiNetworks = []; // WiFi networks for this watch
+
+    var TIMEZONES = [
+        'Europe/London', 'Europe/Dublin', 'Europe/Paris', 'Europe/Berlin',
+        'Europe/Amsterdam', 'Europe/Brussels', 'Europe/Rome', 'Europe/Madrid',
+        'Europe/Lisbon', 'Europe/Zurich', 'Europe/Vienna', 'Europe/Stockholm',
+        'Europe/Oslo', 'Europe/Copenhagen', 'Europe/Helsinki', 'Europe/Warsaw',
+        'Europe/Prague', 'Europe/Budapest', 'Europe/Bucharest', 'Europe/Athens',
+        'Europe/Istanbul', 'Europe/Moscow',
+        'US/Eastern', 'US/Central', 'US/Mountain', 'US/Pacific', 'US/Alaska', 'US/Hawaii',
+        'Canada/Eastern', 'Canada/Central', 'Canada/Mountain', 'Canada/Pacific',
+        'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+        'America/Mexico_City', 'America/Sao_Paulo', 'America/Argentina/Buenos_Aires',
+        'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Singapore',
+        'Asia/Kolkata', 'Asia/Dubai', 'Asia/Seoul', 'Asia/Bangkok',
+        'Australia/Sydney', 'Australia/Melbourne', 'Australia/Perth',
+        'Pacific/Auckland', 'Africa/Johannesburg', 'Africa/Cairo'
+    ];
+
+    function populateTimezoneSelect(selectedTz) {
+        var sel = document.getElementById('watch-timezone');
+        if (!sel) return;
+        sel.innerHTML = '';
+        for (var i = 0; i < TIMEZONES.length; i++) {
+            var opt = document.createElement('option');
+            opt.value = TIMEZONES[i];
+            opt.textContent = TIMEZONES[i];
+            if (TIMEZONES[i] === selectedTz) opt.selected = true;
+            sel.appendChild(opt);
+        }
+    }
 
     function initWatchEdit() {
         requireAuth(function () {
@@ -518,7 +568,72 @@
                 return;
             }
 
-            // Load watch and all faces in parallel
+            // Bind buttons immediately (they exist in static HTML, not async)
+            document.getElementById('btn-add-wifi').addEventListener('click', function () {
+                collectWifiNetworks();
+                if (watchWifiNetworks.length >= 5) {
+                    alert('Maximum 5 WiFi networks');
+                    return;
+                }
+                watchWifiNetworks.push({ ssid: '', password: '', _editing: true });
+                renderWifiNetworks();
+            });
+
+            document.getElementById('btn-save').addEventListener('click', function () {
+                var statusEl = document.getElementById('save-status');
+                statusEl.textContent = 'Saving...';
+                statusEl.style.color = '#757575';
+
+                collectWifiNetworks();
+
+                // Strip transient _editing flag before sending
+                var cleanNets = [];
+                for (var wi = 0; wi < watchWifiNetworks.length; wi++) {
+                    var wn = watchWifiNetworks[wi];
+                    if (wn.ssid) cleanNets.push({ ssid: wn.ssid, password: wn.password });
+                }
+
+                var tzSelect = document.getElementById('watch-timezone');
+                var body = {
+                    name: document.getElementById('watch-edit-name').value,
+                    face_ids: watchFaceIds,
+                    wifi_networks: cleanNets,
+                    timezone: tzSelect ? tzSelect.value : 'Europe/London'
+                };
+
+                api('POST', '/api/watch.py?id=' + watchId, body).then(function (r) {
+                    if (r.success) {
+                        statusEl.textContent = 'Saved';
+                        statusEl.style.color = '#43A047';
+                        document.getElementById('page-title').textContent = 'Edit: ' + (r.watch.name || watchId);
+                        document.title = 'Edit: ' + (r.watch.name || watchId) + ' - CrispFace';
+                        setTimeout(function () { statusEl.textContent = ''; }, 2000);
+                        // Commit all networks (strip _editing, remove empty)
+                        watchWifiNetworks = cleanNets;
+                        renderWifiNetworks();
+                    } else {
+                        statusEl.textContent = 'Error: ' + (r.error || 'Unknown');
+                        statusEl.style.color = '#E53935';
+                    }
+                }).catch(function () {
+                    statusEl.textContent = 'Network error';
+                    statusEl.style.color = '#E53935';
+                });
+            });
+
+            document.getElementById('btn-delete-watch').addEventListener('click', function () {
+                if (!confirm('Delete this watch? (Faces will not be deleted)')) return;
+                api('DELETE', '/api/watch.py?id=' + watchId).then(function (resp) {
+                    if (resp.success) {
+                        if (localStorage.getItem('crispface_current_watch') === watchId) {
+                            localStorage.removeItem('crispface_current_watch');
+                        }
+                        window.location.href = BASE_URL + '/dashboard.html';
+                    }
+                });
+            });
+
+            // Load watch and all faces
             Promise.all([
                 api('GET', '/api/watch.py?id=' + watchId),
                 api('GET', '/api/faces.py')
@@ -539,54 +654,125 @@
                 document.getElementById('page-title').textContent = 'Edit: ' + watch.name;
                 document.getElementById('watch-edit-name').value = watch.name || '';
 
-                watchFaceIds = watch.face_ids || [];
+                populateTimezoneSelect(watch.timezone || 'Europe/London');
 
+                watchFaceIds = watch.face_ids || [];
+                watchWifiNetworks = watch.wifi_networks || [];
+
+                renderWifiNetworks();
                 renderWatchFaces(allFaces, watchId);
                 renderAvailableFaces(allFaces, watchId);
-
-                // Save button
-                document.getElementById('btn-save').addEventListener('click', function () {
-                    var statusEl = document.getElementById('save-status');
-                    statusEl.textContent = 'Saving...';
-                    statusEl.style.color = '#757575';
-
-                    var body = {
-                        name: document.getElementById('watch-edit-name').value,
-                        face_ids: watchFaceIds
-                    };
-
-                    api('POST', '/api/watch.py?id=' + watchId, body).then(function (r) {
-                        if (r.success) {
-                            statusEl.textContent = 'Saved';
-                            statusEl.style.color = '#43A047';
-                            document.getElementById('page-title').textContent = 'Edit: ' + (r.watch.name || watchId);
-                            document.title = 'Edit: ' + (r.watch.name || watchId) + ' - CrispFace';
-                            setTimeout(function () { statusEl.textContent = ''; }, 2000);
-                        } else {
-                            statusEl.textContent = 'Error: ' + (r.error || 'Unknown');
-                            statusEl.style.color = '#E53935';
-                        }
-                    }).catch(function () {
-                        statusEl.textContent = 'Network error';
-                        statusEl.style.color = '#E53935';
-                    });
-                });
-
-                // Delete button
-                document.getElementById('btn-delete-watch').addEventListener('click', function () {
-                    if (!confirm('Delete this watch? (Faces will not be deleted)')) return;
-                    api('DELETE', '/api/watch.py?id=' + watchId).then(function (resp) {
-                        if (resp.success) {
-                            // Clear current watch if it was the deleted one
-                            if (localStorage.getItem('crispface_current_watch') === watchId) {
-                                localStorage.removeItem('crispface_current_watch');
-                            }
-                            window.location.href = BASE_URL + '/dashboard.html';
-                        }
-                    });
-                });
             });
         });
+    }
+
+    function renderWifiNetworks() {
+        var list = document.getElementById('wifi-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        if (watchWifiNetworks.length === 0) {
+            list.innerHTML = '<p class="no-selection">No WiFi networks configured</p>';
+            return;
+        }
+
+        for (var i = 0; i < watchWifiNetworks.length; i++) {
+            var net = watchWifiNetworks[i];
+            var row = document.createElement('div');
+            row.className = 'wifi-row';
+
+            if (net._editing) {
+                // Editing state: inputs + OK button
+                row.classList.add('wifi-row-editing');
+                row.innerHTML =
+                    '<input type="text" placeholder="SSID" class="wifi-ssid" value="' + escHtml(net.ssid || '') + '" />' +
+                    '<div class="wifi-pass-wrap">' +
+                    '<input type="password" placeholder="Password" class="wifi-pass" value="' + escHtml(net.password || '') + '" />' +
+                    '<button type="button" class="wifi-pass-toggle" title="Show/hide password">show</button>' +
+                    '</div>' +
+                    '<button type="button" class="btn btn-primary btn-sm wifi-ok">OK</button>' +
+                    '<button type="button" class="btn btn-danger btn-sm var-remove">&times;</button>';
+
+                // Password toggle
+                (function (rowEl) {
+                    rowEl.querySelector('.wifi-pass-toggle').addEventListener('click', function () {
+                        var input = rowEl.querySelector('.wifi-pass');
+                        if (input.type === 'password') {
+                            input.type = 'text';
+                            this.textContent = 'hide';
+                        } else {
+                            input.type = 'password';
+                            this.textContent = 'show';
+                        }
+                    });
+                })(row);
+
+                // OK button — commit this row
+                (function (idx) {
+                    row.querySelector('.wifi-ok').addEventListener('click', function () {
+                        collectWifiNetworks();
+                        if (!watchWifiNetworks[idx] || !watchWifiNetworks[idx].ssid) {
+                            alert('SSID is required');
+                            return;
+                        }
+                        delete watchWifiNetworks[idx]._editing;
+                        renderWifiNetworks();
+                    });
+                })(i);
+            } else {
+                // Committed state: static display
+                var masked = net.password ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : '(none)';
+                row.classList.add('wifi-row-committed');
+                row.innerHTML =
+                    '<span class="wifi-static-ssid">' + escHtml(net.ssid) + '</span>' +
+                    '<span class="wifi-static-pass">' + masked + '</span>' +
+                    '<button type="button" class="btn btn-secondary btn-sm wifi-edit">Edit</button>' +
+                    '<button type="button" class="btn btn-danger btn-sm var-remove">&times;</button>';
+
+                // Edit button
+                (function (idx) {
+                    row.querySelector('.wifi-edit').addEventListener('click', function () {
+                        collectWifiNetworks();
+                        watchWifiNetworks[idx]._editing = true;
+                        renderWifiNetworks();
+                    });
+                })(i);
+            }
+
+            // Remove button (both states)
+            (function (idx) {
+                row.querySelector('.var-remove').addEventListener('click', function () {
+                    collectWifiNetworks();
+                    watchWifiNetworks.splice(idx, 1);
+                    renderWifiNetworks();
+                });
+            })(i);
+
+            list.appendChild(row);
+        }
+    }
+
+    function collectWifiNetworks() {
+        var list = document.getElementById('wifi-list');
+        if (!list) return;
+        var rows = list.querySelectorAll('.wifi-row');
+        var nets = [];
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].classList.contains('wifi-row-editing')) {
+                var ssidInput = rows[i].querySelector('.wifi-ssid');
+                var passInput = rows[i].querySelector('.wifi-pass');
+                var ssid = ssidInput ? ssidInput.value.trim() : '';
+                var pass = passInput ? passInput.value : '';
+                nets.push({ ssid: ssid, password: pass, _editing: true });
+            } else {
+                // Committed row — preserve from watchWifiNetworks
+                if (i < watchWifiNetworks.length) {
+                    var existing = watchWifiNetworks[i];
+                    nets.push({ ssid: existing.ssid, password: existing.password });
+                }
+            }
+        }
+        watchWifiNetworks = nets;
     }
 
     function renderWatchFaces(allFaces, watchId) {
@@ -700,12 +886,298 @@
         });
     }
 
+    // ---- Flash page ----
+    function initFlash() {
+        requireAuth(function () {
+            var buildBtn = document.getElementById('btn-build');
+            var statusEl = document.getElementById('flash-status');
+            var flashWrap = document.getElementById('flash-wrap');
+            var installBtn = document.getElementById('install-btn');
+            var options = document.querySelectorAll('.firmware-option');
+            var watchSelect = document.getElementById('flash-watch-select');
+            var watchPicker = document.getElementById('flash-watch-picker');
+            var wifiInfo = document.getElementById('flash-wifi-info');
+            var watchesData = [];
+            var lastBuild = null; // metadata for the most recent build
+
+            // ---- Flash history (localStorage) ----
+            var FLASH_LOG_KEY = 'crispface_flash_log';
+            var FLASH_LOG_MAX = 50;
+
+            function getFlashLog() {
+                try {
+                    return JSON.parse(localStorage.getItem(FLASH_LOG_KEY)) || [];
+                } catch (e) { return []; }
+            }
+
+            function saveFlashLog(log) {
+                localStorage.setItem(FLASH_LOG_KEY, JSON.stringify(log.slice(-FLASH_LOG_MAX)));
+            }
+
+            function addLogEntry(entry) {
+                var log = getFlashLog();
+                log.push(entry);
+                saveFlashLog(log);
+                renderFlashLog();
+            }
+
+            function updateLastLogEntry(updates) {
+                var log = getFlashLog();
+                if (log.length === 0) return;
+                var last = log[log.length - 1];
+                for (var k in updates) last[k] = updates[k];
+                saveFlashLog(log);
+                renderFlashLog();
+            }
+
+            function formatTime(ts) {
+                var d = new Date(ts);
+                var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+                return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+                    ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+            }
+
+            function renderFlashLog() {
+                var container = document.getElementById('flash-log-entries');
+                if (!container) return;
+                var log = getFlashLog();
+                container.innerHTML = '';
+
+                if (log.length === 0) {
+                    container.innerHTML = '<p class="flash-log-empty">No flashes yet</p>';
+                    return;
+                }
+
+                // Show last 5, newest first
+                var recent = log.slice(-5).reverse();
+                for (var i = 0; i < recent.length; i++) {
+                    var entry = recent[i];
+                    var div = document.createElement('div');
+                    div.className = 'flash-log-entry';
+
+                    var resultClass = entry.status === 'flashed' ? 'flash-log-result-flashed' : 'flash-log-result-built';
+                    var resultLabel = entry.status === 'flashed' ? 'Flashed' : 'Built';
+
+                    div.innerHTML =
+                        '<span class="flash-log-time">' + escHtml(formatTime(entry.timestamp)) + '</span>' +
+                        '<span class="flash-log-version">v' + escHtml(entry.version || '?') + '</span>' +
+                        '<span class="flash-log-watch">' + escHtml(entry.watchName || entry.env || '') + '</span>' +
+                        '<span class="flash-log-result ' + resultClass + '">' + resultLabel + '</span>';
+
+                    container.appendChild(div);
+                }
+            }
+
+            function showAllFlashes() {
+                var existing = document.querySelector('.flash-log-popup');
+                if (existing) existing.remove();
+
+                var log = getFlashLog().slice().reverse();
+                var overlay = document.createElement('div');
+                overlay.className = 'flash-log-popup';
+
+                var inner = document.createElement('div');
+                inner.className = 'flash-log-popup-inner';
+
+                var html = '<button type="button" class="flash-log-popup-close">&times;</button>';
+                html += '<h2>All Flash History</h2>';
+
+                if (log.length === 0) {
+                    html += '<p class="flash-log-empty">No flashes yet</p>';
+                } else {
+                    for (var i = 0; i < log.length; i++) {
+                        var entry = log[i];
+                        var resultClass = entry.status === 'flashed' ? 'flash-log-result-flashed' : 'flash-log-result-built';
+                        var resultLabel = entry.status === 'flashed' ? 'Flashed' : 'Built';
+                        html += '<div class="flash-log-entry">' +
+                            '<span class="flash-log-time">' + escHtml(formatTime(entry.timestamp)) + '</span>' +
+                            '<span class="flash-log-version">v' + escHtml(entry.version || '?') + '</span>' +
+                            '<span class="flash-log-watch">' + escHtml(entry.watchName || entry.env || '') +
+                            (entry.sizeKB ? ' (' + entry.sizeKB + ' KB)' : '') + '</span>' +
+                            '<span class="flash-log-result ' + resultClass + '">' + resultLabel + '</span>' +
+                            '</div>';
+                    }
+                }
+
+                inner.innerHTML = html;
+                overlay.appendChild(inner);
+                document.body.appendChild(overlay);
+
+                inner.querySelector('.flash-log-popup-close').addEventListener('click', function () {
+                    overlay.remove();
+                });
+                overlay.addEventListener('click', function (e) {
+                    if (e.target === overlay) overlay.remove();
+                });
+            }
+
+            document.getElementById('flash-log-all').addEventListener('click', function (e) {
+                e.preventDefault();
+                showAllFlashes();
+            });
+
+            renderFlashLog();
+
+            // ---- Watch picker ----
+            function getSelectedEnv() {
+                var checked = document.querySelector('input[name="firmware"]:checked');
+                return checked ? checked.value : 'watchy';
+            }
+
+            function setStatus(msg, cls) {
+                statusEl.innerHTML = msg;
+                statusEl.className = cls || '';
+            }
+
+            function getWatchName() {
+                var id = watchSelect.value;
+                for (var i = 0; i < watchesData.length; i++) {
+                    if (watchesData[i].id === id) return watchesData[i].name;
+                }
+                return '';
+            }
+
+            function loadWatches() {
+                api('GET', '/api/watches.py').then(function (data) {
+                    if (!data.success || !data.watches || data.watches.length === 0) return;
+                    watchesData = data.watches;
+                    watchSelect.innerHTML = '';
+                    var currentId = localStorage.getItem('crispface_current_watch');
+                    for (var i = 0; i < data.watches.length; i++) {
+                        var opt = document.createElement('option');
+                        opt.value = data.watches[i].id;
+                        opt.textContent = data.watches[i].name;
+                        if (data.watches[i].id === currentId) opt.selected = true;
+                        watchSelect.appendChild(opt);
+                    }
+                    watchPicker.style.display = '';
+                    updateWifiInfo();
+                }).catch(function () {});
+            }
+
+            function updateWifiInfo() {
+                var id = watchSelect.value;
+                for (var i = 0; i < watchesData.length; i++) {
+                    if (watchesData[i].id === id) {
+                        var nets = watchesData[i].wifi_networks || [];
+                        if (nets.length === 0) {
+                            wifiInfo.textContent = 'No WiFi networks configured for this watch';
+                        } else {
+                            var ssids = [];
+                            for (var j = 0; j < nets.length; j++) ssids.push(nets[j].ssid);
+                            wifiInfo.textContent = nets.length + ' network' + (nets.length !== 1 ? 's' : '') + ': ' + ssids.join(', ');
+                        }
+                        return;
+                    }
+                }
+                wifiInfo.textContent = '';
+            }
+
+            watchSelect.addEventListener('change', updateWifiInfo);
+            loadWatches();
+
+            // Firmware picker styling
+            document.querySelectorAll('input[name="firmware"]').forEach(function (radio) {
+                radio.addEventListener('change', function () {
+                    options.forEach(function (opt) { opt.classList.remove('firmware-option-selected'); });
+                    this.closest('.firmware-option').classList.add('firmware-option-selected');
+                    flashWrap.style.display = 'none';
+                    setStatus('', '');
+                });
+            });
+
+            // Check Web Serial support
+            if (!('serial' in navigator)) {
+                buildBtn.disabled = true;
+                buildBtn.textContent = 'Not Supported';
+                setStatus('Web Serial API not available. Use Chrome or Edge 89+.', 'status-error');
+                return;
+            }
+
+            document.getElementById('btn-test').addEventListener('click', async function () {
+                setStatus('Requesting serial port...', 'status-building');
+                try {
+                    var port = await navigator.serial.requestPort();
+                    await port.open({ baudRate: 115200 });
+                    var info = port.getInfo();
+                    var desc = 'Connected';
+                    if (info.usbVendorId) desc += ' (VID: 0x' + info.usbVendorId.toString(16) + ')';
+                    await port.close();
+                    setStatus(desc + ' — device detected', 'status-success');
+                } catch (e) {
+                    if (e.name === 'NotFoundError') {
+                        setStatus('No port selected', '');
+                    } else {
+                        setStatus('Connection failed: ' + e.message, 'status-error');
+                    }
+                }
+            });
+
+            // Detect flash dialog close — ESP Web Tools fires "closed" on the install button
+            installBtn.addEventListener('closed', function () {
+                if (lastBuild) {
+                    updateLastLogEntry({ status: 'flashed' });
+                    lastBuild = null;
+                }
+            });
+
+            buildBtn.addEventListener('click', async function () {
+                var env = getSelectedEnv();
+                var label = env === 'watchy' ? 'CrispFace' : 'Watchy Stock';
+
+                buildBtn.disabled = true;
+                buildBtn.textContent = 'Building...';
+                flashWrap.style.display = 'none';
+                setStatus('Compiling ' + label + ' firmware...', 'status-building');
+
+                try {
+                    var url = BASE_URL + '/api/build_firmware.php?env=' + env;
+                    if (env === 'watchy' && watchSelect.value) {
+                        url += '&watch_id=' + encodeURIComponent(watchSelect.value);
+                    }
+
+                    var resp = await fetch(url);
+                    var data = await resp.json();
+
+                    if (!data.success) {
+                        setStatus('Build failed: ' + (data.error || 'Unknown error'), 'status-error');
+                        if (data.output) console.error('Build output:', data.output);
+                        return;
+                    }
+
+                    var sizeKB = Math.round(data.size / 1024);
+                    setStatus('Built v' + (data.version || '?') + ' (' + sizeKB + ' KB)', 'status-success');
+
+                    // Record build in log
+                    lastBuild = {
+                        timestamp: Date.now(),
+                        version: data.version || '?',
+                        env: env,
+                        watchName: getWatchName() || label,
+                        sizeKB: sizeKB,
+                        status: 'built'
+                    };
+                    addLogEntry(lastBuild);
+
+                    installBtn.setAttribute('manifest', data.manifest);
+                    flashWrap.style.display = '';
+                } catch (e) {
+                    setStatus('Build request failed: ' + e.message, 'status-error');
+                } finally {
+                    buildBtn.disabled = false;
+                    buildBtn.textContent = 'Build';
+                }
+            });
+        });
+    }
+
     // ---- Utility ----
     function escHtml(str) {
         var div = document.createElement('div');
         div.appendChild(document.createTextNode(str));
         return div.innerHTML;
     }
+    window.CRISPFACE.escHtml = escHtml;
 
     // ---- Auto-init based on page ----
     document.addEventListener('DOMContentLoaded', function () {
@@ -720,6 +1192,7 @@
         else if (page === 'watch-edit') initWatchEdit();
         else if (page === 'complications') initComplications();
         else if (page === 'complication-edit') initComplicationEdit();
+        else if (page === 'flash') initFlash();
         // editor page is handled by editor.js
     });
 })();

@@ -336,57 +336,45 @@ This enables home automation triggers, toggles, etc.
 
 ## API Endpoints
 
-### Sync (Primary Endpoint)
+### Watch Faces (Implemented)
 
-**POST** `/api/crispface/sync`
+**GET** `/api/watch_faces.py?watch_id=<id>`
 
-Request:
-```json
-{
-  "device_id": "watchy-a1b2c3",
-  "battery_pct": 78,
-  "current_face": "daily-driver",
-  "stale_complications": ["weather-temp", "calendar-next"]
-}
-```
+Auth: `Authorization: Bearer <token>`
+
+Returns all faces for a watch with server-side complications pre-resolved. Local complications (time, date, battery) are flagged with `local: true` for on-device rendering.
 
 Response:
 ```json
 {
-  "faces": ["daily-driver", "minimal", "calendar-view"],
-  "current_face": {
-    "id": "daily-driver",
-    "complications": [...]
-  },
-  "complication_updates": {
-    "weather-temp": {"value": "12°", ...},
-    "calendar-next": {"value": "Team sync in 2h", ...}
-  },
-  "ntp_sync": true
+  "success": true,
+  "faces": [
+    {
+      "id": "f65dc7a50fa31c67",
+      "name": "Weekend Face",
+      "bg": "white",
+      "stale": 60,
+      "complications": [
+        {
+          "id": "time", "type": "time",
+          "x": 10, "y": 10, "w": 180, "h": 60,
+          "stale": 600, "value": "20:42",
+          "font": "mono", "size": 48, "bold": false,
+          "align": "center", "color": "black",
+          "local": true
+        }
+      ]
+    }
+  ],
+  "fetched_at": 1707900000
 }
 ```
 
-### Registration
+### Planned Endpoints (Not Yet Implemented)
 
-**POST** `/api/crispface/register`
-
-```json
-{
-  "device_id": "watchy-a1b2c3",
-  "firmware_version": "crispface-0.1.0",
-  "capabilities": {
-    "display": "200x200x1",
-    "buttons": 4,
-    "sensors": ["accelerometer", "rtc", "battery"]
-  }
-}
-```
-
-### Face Definition
-
-**GET** `/api/crispface/face/{face_id}`
-
-Returns full face JSON. Used when switching faces.
+- **POST** `/api/crispface/sync` — granular complication-level updates
+- **POST** `/api/crispface/register` — device self-registration
+- **GET** `/api/crispface/face/{face_id}` — individual face fetch
 
 ---
 
@@ -654,11 +642,36 @@ Server responds with error if version too old:
 
 ---
 
+## Implementation Status
+
+### Implemented
+- Web face editor with Fabric.js canvas (200x200, text complications, fonts, alignment)
+- Face and watch CRUD (flat-file JSON storage)
+- Complication sources: time, date, weather, sample word
+- Watch faces API with server-side resolution and Bearer auth
+- ESP32-S3 firmware: text rendering, face cycling, auto-sync, SPIFFS caching
+- Build-on-demand with auto version bump
+- Web Serial flashing (Chrome/Edge)
+
+### Not Yet Implemented
+- Bitmap, progress bar, and QR code complication types
+- Custom button actions (HTTP POST from watch)
+- Long press / double tap button actions
+- Device registration and multi-device management
+- OTA firmware updates
+- Downloadable fonts
+- Step counter integration
+- Configurable WiFi (currently hardcoded in firmware)
+
+---
+
 ## Future Considerations
 
+- **Bitmap complications**: 1-bit images in face layouts
 - **Downloadable fonts**: Fetch additional fonts from server
 - **OTA updates**: Firmware updates via server
 - **Multi-device**: Same config across multiple watches
+- **Configurable WiFi**: Currently hardcoded in firmware
 - **Step counter integration**: Report steps to server, display in complications
 
 ---
@@ -671,3 +684,4 @@ Server responds with error if version too old:
 | 0.2 | 2026-02-07 | Removed face stack, canvas type. Added visual builder spec. Clarified time handling on-device. Reduced fonts to minimal set. |
 | 0.3 | 2026-02-07 | Added: offline behavior (cached face), long press support, inherit from stock Watchy firmware, button-only wake (no tilt, no timed wake). |
 | 0.4 | 2026-02-07 | Added: double-tap support, full button action list (none, refresh, next/prev_face, menu, invert, custom), default button mappings, button config in web builder, multi-device support. |
+| 0.5 | 2026-02-14 | Updated API endpoints to match implementation. Added implementation status and roadmap. |
