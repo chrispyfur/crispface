@@ -2,7 +2,6 @@
     "id": "text",
     "name": "Text",
     "description": "Displays a fixed text string on the watch face.",
-    "script": "text.py",
     "variables": [
         {
             "name": "text",

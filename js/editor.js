@@ -1015,7 +1015,7 @@
 
             var params = {};
             var source = '';
-            if (ctype) {
+            if (ctype && ctype.script) {
                 source = '/crispface/api/sources/' + ctype.script;
                 var vars = ctype.variables || [];
                 for (var i = 0; i < vars.length; i++) {
