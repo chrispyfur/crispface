@@ -427,6 +427,9 @@ def save_watch(watch_id, data, user):
                 validated_nets.append({'ssid': ssid, 'password': password})
         existing['wifi_networks'] = validated_nets
 
+    if 'debug' in data:
+        existing['debug'] = bool(data['debug'])
+
     existing['updated_at'] = _now_iso()
     _write_watch(watch_id, existing, user)
     return existing
