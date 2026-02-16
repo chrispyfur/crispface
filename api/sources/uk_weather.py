@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """UK weather data source using Met Office DataHub API.
 Accepts ?apikey=KEY&town=Derby&display=summary parameters."""
-import sys, os, json, time, math, urllib.request, urllib.parse
+import sys, os, json, time, math, urllib.request, urllib.parse, urllib.error
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
@@ -126,17 +126,16 @@ def fetch_weather():
         # Navigate GeoJSON: features[0].properties.timeSeries[0]
         features = data.get('features', [])
         if not features:
-            return None
+            return {'_error': 'No data'}
         props = features[0].get('properties', {})
         series = props.get('timeSeries', [])
         if not series:
-            return None
+            return {'_error': 'No forecast'}
         # Find closest entry to current time
         now = time.time()
         best = series[0]
         for entry in series:
             t_str = entry.get('time', '')
-            # Parse ISO time to compare
             try:
                 from datetime import datetime
                 dt = datetime.fromisoformat(t_str.replace('Z', '+00:00'))
@@ -149,9 +148,16 @@ def fetch_weather():
                 best = entry
                 break
         return best
+    except urllib.error.HTTPError as e:
+        sys.stderr.write('uk_weather: HTTP {}: {}\n'.format(e.code, e.reason))
+        if e.code in (401, 403):
+            return {'_error': 'Bad API key'}
+        elif e.code == 429:
+            return {'_error': 'Rate limited'}
+        return {'_error': 'HTTP {}'.format(e.code)}
     except Exception as e:
-        sys.stderr.write('uk_weather: API error: {}\n'.format(e))
-        return None
+        sys.stderr.write('uk_weather: error: {}\n'.format(e))
+        return {'_error': 'Connection error'}
 
 
 def get_cached():
@@ -184,16 +190,23 @@ if cached:
     ts = cached
 else:
     ts = fetch_weather()
-    if ts:
+    if ts and '_error' not in ts:
         save_cache(ts)
-    else:
-        # Try stale cache
+    elif ts and '_error' in ts:
+        # API returned an error — try stale cache before giving up
+        error_msg = ts['_error']
+        ts = None
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, 'r') as f:
                     ts = json.load(f)
             except Exception:
-                ts = None
+                pass
+        if not ts:
+            print('Content-Type: application/json')
+            print()
+            print(json.dumps({'value': error_msg}))
+            sys.exit(0)
 
 if ts:
     value = format_value(display, ts)
