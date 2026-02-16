@@ -108,14 +108,6 @@ if ($watchId && $env === 'watchy') {
             $config
         );
 
-        // Inject debug flag
-        $debugVal = !empty($watch['debug']) ? '1' : '0';
-        $config = preg_replace(
-            '/#define\s+CRISPFACE_DEBUG\s+[^\n]+/',
-            '#define CRISPFACE_DEBUG ' . $debugVal,
-            $config
-        );
-
         // Inject WiFi networks
         $networks = $watch['wifi_networks'] ?? [];
         if (!empty($networks)) {

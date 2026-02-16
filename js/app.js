@@ -607,13 +607,11 @@
                 }
 
                 var tzSelect = document.getElementById('watch-timezone');
-                var debugCb = document.getElementById('watch-debug');
                 var body = {
                     name: document.getElementById('watch-edit-name').value,
                     face_ids: watchFaceIds,
                     wifi_networks: cleanNets,
-                    timezone: tzSelect ? tzSelect.value : 'Europe/London',
-                    debug: debugCb ? debugCb.checked : false
+                    timezone: tzSelect ? tzSelect.value : 'Europe/London'
                 };
 
                 api('POST', '/api/watch.py?id=' + watchId, body).then(function (r) {
@@ -670,9 +668,6 @@
                 document.getElementById('watch-edit-name').value = watch.name || '';
 
                 populateTimezoneSelect(watch.timezone || 'Europe/London');
-
-                var debugCb = document.getElementById('watch-debug');
-                if (debugCb) debugCb.checked = !!watch.debug;
 
                 watchFaceIds = watch.face_ids || [];
                 watchWifiNetworks = watch.wifi_networks || [];

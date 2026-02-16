@@ -170,6 +170,19 @@ public:
             int now = makeTime(currentTime);
             bool doublePress = (cfLastBackPress > 0 && (now - cfLastBackPress) <= 4);
             cfLastBackPress = now;
+
+            // Long hold detection: if still held after 1.5s → debug sync
+            pinMode(BACK_BTN_PIN, INPUT);
+            delay(1500);
+            if (digitalRead(BACK_BTN_PIN) == LOW) {
+                // Long hold — debug sync
+                syncFromServer(true);
+                cfNeedsSync = false;
+                RTC.read(currentTime);
+                // Debug screen stays visible; next normal wake redraws
+                return;
+            }
+
             cfNeedsSync = true;
             showWatchFace(!doublePress); // double-press = full refresh
         }
@@ -250,7 +263,7 @@ private:
         display.displayWindow(0, barY, 200, barH);
     }
 
-    bool cfConnectWiFi() {
+    bool cfConnectWiFi(bool debug = false) {
         // Known networks from config (injected at build time)
         const char* knownSSIDs[] = {
 #if CRISPFACE_WIFI_COUNT >= 1
@@ -289,7 +302,7 @@ private:
         const int netCount = CRISPFACE_WIFI_COUNT;
         cfDebugWifi = "";
 
-        if (CRISPFACE_DEBUG) {
+        if (debug) {
             cfDebugWifi += "WiFi: ";
             cfDebugWifi += String(netCount);
             cfDebugWifi += " known\n";
@@ -300,14 +313,14 @@ private:
         WiFi.mode(WIFI_STA);
 
         if (netCount == 0) {
-            if (CRISPFACE_DEBUG) cfDebugWifi += "No networks!\n";
+            if (debug) cfDebugWifi += "No networks!\n";
             WiFi.mode(WIFI_OFF);
             return false;
         }
 
         if (netCount == 1) {
             // Single network — connect directly without scanning
-            if (CRISPFACE_DEBUG) {
+            if (debug) {
                 cfDebugWifi += "Try: ";
                 cfDebugWifi += knownSSIDs[0];
                 cfDebugWifi += "\n";
@@ -319,10 +332,10 @@ private:
                 attempts++;
             }
             if (WiFi.status() == WL_CONNECTED) {
-                if (CRISPFACE_DEBUG) cfDebugWifi += "Connected OK\n";
+                if (debug) cfDebugWifi += "Connected OK\n";
                 return true;
             }
-            if (CRISPFACE_DEBUG) {
+            if (debug) {
                 cfDebugWifi += "FAIL after ";
                 cfDebugWifi += String(attempts);
                 cfDebugWifi += " tries\n";
@@ -334,7 +347,7 @@ private:
 
         // Multiple networks — scan and connect to strongest known one
         int found = WiFi.scanNetworks();
-        if (CRISPFACE_DEBUG) {
+        if (debug) {
             cfDebugWifi += "Scan: ";
             cfDebugWifi += String(found);
             cfDebugWifi += " found\n";
@@ -350,7 +363,7 @@ private:
         // Iterate scan results and try connecting to first known match.
         for (int i = 0; i < found; i++) {
             String scannedSSID = WiFi.SSID(i);
-            if (CRISPFACE_DEBUG && i < 5) {
+            if (debug && i < 5) {
                 cfDebugWifi += " ";
                 cfDebugWifi += scannedSSID;
                 cfDebugWifi += " (";
@@ -359,7 +372,7 @@ private:
             }
             for (int k = 0; k < netCount; k++) {
                 if (scannedSSID == knownSSIDs[k]) {
-                    if (CRISPFACE_DEBUG) {
+                    if (debug) {
                         cfDebugWifi += "Try: ";
                         cfDebugWifi += knownSSIDs[k];
                         cfDebugWifi += "\n";
@@ -371,11 +384,11 @@ private:
                         attempts++;
                     }
                     if (WiFi.status() == WL_CONNECTED) {
-                        if (CRISPFACE_DEBUG) cfDebugWifi += "Connected OK\n";
+                        if (debug) cfDebugWifi += "Connected OK\n";
                         WiFi.scanDelete();
                         return true;
                     }
-                    if (CRISPFACE_DEBUG) {
+                    if (debug) {
                         cfDebugWifi += "FAIL after ";
                         cfDebugWifi += String(attempts);
                         cfDebugWifi += " tries\n";
@@ -411,12 +424,12 @@ private:
         }
     }
 
-    void syncFromServer() {
-        String dbg; // debug log, displayed if CRISPFACE_DEBUG
+    void syncFromServer(bool debug = false) {
+        String dbg; // debug log, displayed when debug=true
         syncProgress(5);
 
-        if (!cfConnectWiFi()) {
-            if (CRISPFACE_DEBUG) {
+        if (!cfConnectWiFi(debug)) {
+            if (debug) {
                 dbg += cfDebugWifi;
                 dbg += "RESULT: WiFi FAILED\n";
                 renderDebug(dbg);
@@ -425,7 +438,7 @@ private:
             return;
         }
 
-        if (CRISPFACE_DEBUG) {
+        if (debug) {
             dbg += cfDebugWifi;
             dbg += "IP: ";
             dbg += WiFi.localIP().toString();
@@ -447,7 +460,7 @@ private:
         snprintf(url, sizeof(url), "%s%s?watch_id=%s",
                  CRISPFACE_SERVER, CRISPFACE_API_PATH, CRISPFACE_WATCH_ID);
 
-        if (CRISPFACE_DEBUG) {
+        if (debug) {
             dbg += "URL: ";
             dbg += url;
             dbg += "\n";
@@ -468,7 +481,7 @@ private:
             cfSyncNTP();
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
-            if (CRISPFACE_DEBUG) {
+            if (debug) {
                 dbg += "HTTP: ";
                 dbg += String(httpCode);
                 dbg += " FAILED\n";
@@ -496,7 +509,7 @@ private:
             payload = "";
 
             if (err || !doc["success"].as<bool>()) {
-                if (CRISPFACE_DEBUG) {
+                if (debug) {
                     dbg += "HTTP: 200 OK\n";
                     dbg += "Body: ";
                     dbg += String(payloadLen);
@@ -517,7 +530,7 @@ private:
             JsonArray faces = doc["faces"].as<JsonArray>();
             int total = faces.size();
             if (total == 0) {
-                if (CRISPFACE_DEBUG) {
+                if (debug) {
                     dbg += "HTTP: 200 OK\n";
                     dbg += "Faces: 0 (empty)\n";
                     renderDebug(dbg);
@@ -618,7 +631,7 @@ private:
             }
         }
 
-        if (CRISPFACE_DEBUG) {
+        if (debug) {
             dbg += "HTTP: 200 OK\n";
             dbg += "Faces: ";
             dbg += String(cfFaceCount);
