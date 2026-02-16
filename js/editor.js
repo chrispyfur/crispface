@@ -22,8 +22,50 @@
         { value: 72, label: 'Huge (48pt)' }
     ];
 
-    // Map stored editor px → GFX getTextBounds("Ay") height for FreeSans at that pt size.
-    // Ensures editor text fills the same vertical space as on the watch.
+    // Pre-computed GFX font metrics from Adafruit GFX bitmap font headers.
+    // Keys: family|size|bold → { th: getTextBounds("Ay") height, ascent: -(int)ty }
+    // These match the firmware's drawAligned() rendering exactly.
+    var GFX_METRICS = {
+        // sans-serif regular
+        'sans-serif|12|0': { th: 17, ascent: 12 }, 'sans-serif|16|0': { th: 23, ascent: 17 },
+        'sans-serif|24|0': { th: 34, ascent: 25 }, 'sans-serif|48|0': { th: 44, ascent: 33 },
+        'sans-serif|60|0': { th: 67, ascent: 51 }, 'sans-serif|72|0': { th: 89, ascent: 69 },
+        // sans-serif bold
+        'sans-serif|12|1': { th: 17, ascent: 12 }, 'sans-serif|16|1': { th: 23, ascent: 17 },
+        'sans-serif|24|1': { th: 33, ascent: 25 }, 'sans-serif|48|1': { th: 45, ascent: 33 },
+        'sans-serif|60|1': { th: 68, ascent: 51 }, 'sans-serif|72|1': { th: 89, ascent: 69 },
+        // monospace regular
+        'monospace|12|0': { th: 13, ascent: 9 },  'monospace|16|0': { th: 18, ascent: 13 },
+        'monospace|24|0': { th: 27, ascent: 19 },  'monospace|48|0': { th: 35, ascent: 25 },
+        'monospace|60|0': { th: 53, ascent: 39 },  'monospace|72|0': { th: 70, ascent: 53 },
+        // monospace bold
+        'monospace|12|1': { th: 15, ascent: 10 },  'monospace|16|1': { th: 19, ascent: 13 },
+        'monospace|24|1': { th: 28, ascent: 20 },  'monospace|48|1': { th: 36, ascent: 26 },
+        'monospace|60|1': { th: 55, ascent: 40 },  'monospace|72|1': { th: 74, ascent: 54 },
+        // serif regular
+        'serif|12|0': { th: 16, ascent: 11 },  'serif|16|0': { th: 21, ascent: 15 },
+        'serif|24|0': { th: 31, ascent: 22 },  'serif|48|0': { th: 42, ascent: 31 },
+        'serif|60|0': { th: 63, ascent: 47 },  'serif|72|0': { th: 83, ascent: 62 },
+        // serif bold
+        'serif|12|1': { th: 16, ascent: 11 },  'serif|16|1': { th: 21, ascent: 15 },
+        'serif|24|1': { th: 31, ascent: 23 },  'serif|48|1': { th: 42, ascent: 32 },
+        'serif|60|1': { th: 63, ascent: 48 },  'serif|72|1': { th: 84, ascent: 64 }
+    };
+    // Legacy alias for 8px (same as 12)
+    GFX_METRICS['sans-serif|8|0'] = GFX_METRICS['sans-serif|12|0'];
+    GFX_METRICS['sans-serif|8|1'] = GFX_METRICS['sans-serif|12|1'];
+    GFX_METRICS['monospace|8|0'] = GFX_METRICS['monospace|12|0'];
+    GFX_METRICS['monospace|8|1'] = GFX_METRICS['monospace|12|1'];
+    GFX_METRICS['serif|8|0'] = GFX_METRICS['serif|12|0'];
+    GFX_METRICS['serif|8|1'] = GFX_METRICS['serif|12|1'];
+
+    function getGfxMetrics(family, size, bold) {
+        var key = family + '|' + size + '|' + (bold ? '1' : '0');
+        return GFX_METRICS[key] || { th: size, ascent: Math.round(size * 0.75) };
+    }
+
+    // DISPLAY_SIZE_MAP kept for backward compat — maps stored size to FreeSans th.
+    // The after:render code now uses getGfxMetrics() for per-font accuracy.
     var DISPLAY_SIZE_MAP = { 8: 17, 12: 17, 16: 23, 24: 34, 48: 44, 60: 67, 72: 89 };
 
     var ALIGNS = ['left', 'center', 'right'];
@@ -39,6 +81,8 @@
     window.CRISPFACE.FONT_FAMILIES = FONT_FAMILIES;
     window.CRISPFACE.FONT_SIZES = FONT_SIZES;
     window.CRISPFACE.DISPLAY_SIZE_MAP = DISPLAY_SIZE_MAP;
+    window.CRISPFACE.GFX_METRICS = GFX_METRICS;
+    window.CRISPFACE.getGfxMetrics = getGfxMetrics;
     window.CRISPFACE.ALIGNS = ALIGNS;
     window.CRISPFACE.getInset = getInset;
 
@@ -224,24 +268,21 @@
                 } else if (d.type === 'text' && d.content) {
                     // Draw text matching firmware's drawAligned() algorithm
                     var content = d.content;
-                    var displaySize = DISPLAY_SIZE_MAP[content.size] || content.size;
+                    var gfx = getGfxMetrics(content.family, content.size, content.bold);
                     var weight = content.bold ? 'bold ' : '';
 
                     // Fill inner area with background (occludes overlapping complications)
                     ctx.fillStyle = bg;
                     ctx.fillRect(ix, iy, iw, ih);
 
-                    // Set font matching firmware
-                    ctx.font = weight + displaySize + 'px ' + content.family;
+                    // Set font — use GFX th as CSS font-size so glyphs fill the same height
+                    ctx.font = weight + gfx.th + 'px ' + content.family;
                     ctx.fillStyle = col;
                     ctx.textBaseline = 'alphabetic';
 
-                    // Measure ascent (matching firmware's getTextBounds("Ay"))
-                    // Floor ascent to integer — firmware uses integer ty from getTextBounds
-                    var metrics = ctx.measureText('Ay');
-                    var ascent = Math.floor(metrics.actualBoundingBoxAscent);
-                    var descent = Math.ceil(metrics.actualBoundingBoxDescent);
-                    var lineH = ascent + descent + 2; // firmware: th + 2
+                    // Use pre-computed GFX ascent/descent (not browser measureText)
+                    var ascent = gfx.ascent;
+                    var lineH = gfx.th + 2; // firmware: th + 2
 
                     // Clip to inner bounds
                     ctx.save();
@@ -257,21 +298,15 @@
 
                     for (var li = 0; li < lines.length; li++) {
                         if (curY - ascent >= iy + ih) break;
-                        // Measure actual pixel extent of this line
-                        // (firmware uses getTextBounds tw, not advance width)
-                        var lm = ctx.measureText(lines[li]);
-                        var lmLeft = lm.actualBoundingBoxLeft || 0;
-                        var lmRight = lm.actualBoundingBoxRight || 0;
-                        var actualW = lmLeft + lmRight;
+                        // Use advance width for alignment (firmware uses getTextBounds tw)
+                        var lineW = ctx.measureText(lines[li]).width;
                         var curX;
                         if (align === 'center') {
-                            // Center actual pixels in bounds
-                            curX = ix + Math.round((iw - actualW) / 2) + lmLeft;
+                            curX = ix + Math.round((iw - lineW) / 2);
                         } else if (align === 'right') {
-                            curX = ix + iw - Math.ceil(actualW) + lmLeft;
+                            curX = ix + iw - Math.ceil(lineW);
                         } else {
-                            // Left: offset so leftmost pixel is flush with ix
-                            curX = ix + lmLeft;
+                            curX = ix;
                         }
                         ctx.fillText(lines[li], curX, curY);
                         curY += lineH;
