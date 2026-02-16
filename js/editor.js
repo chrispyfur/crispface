@@ -309,16 +309,37 @@
 
                     for (var li = 0; li < lines.length; li++) {
                         if (curY - ascent >= iy + ih) break;
-                        var lineW = ctx.measureText(lines[li]).width;
+                        var lineText = lines[li];
+                        var circleType = 0; // 0=none, 1=filled, 2=open
+                        if (lineText.charCodeAt(0) === 1) { circleType = 1; lineText = lineText.substring(1).trimStart(); }
+                        else if (lineText.charCodeAt(0) === 2) { circleType = 2; lineText = lineText.substring(1).trimStart(); }
+
+                        var circleW = 0;
+                        if (circleType) {
+                            var cr = Math.round(ascent / 4);
+                            circleW = cr * 2 + 3;
+                        }
+
+                        var lineW = ctx.measureText(lineText).width;
                         var curX;
                         if (align === 'center') {
-                            curX = ix + Math.round((iw - lineW) / 2);
+                            curX = ix + Math.round((iw - lineW - circleW) / 2);
                         } else if (align === 'right') {
-                            curX = ix + iw - Math.ceil(lineW);
+                            curX = ix + iw - Math.ceil(lineW) - circleW;
                         } else {
                             curX = ix;
                         }
-                        ctx.fillText(lines[li], curX, curY);
+
+                        if (circleType) {
+                            var cr = Math.round(ascent / 4);
+                            var cy = curY - Math.round(ascent / 2);
+                            var cx = curX + cr;
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+                            if (circleType === 1) ctx.fill(); else ctx.stroke();
+                            curX += circleW;
+                        }
+                        ctx.fillText(lineText, curX, curY);
                         curY += lineH;
                     }
                     ctx.restore();

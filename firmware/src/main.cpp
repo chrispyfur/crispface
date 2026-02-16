@@ -19,15 +19,17 @@ RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
 
 // ---- Alert system ----
 struct CfAlert {
-    int  eventTime;     // cfLastSync + min*60
-    bool insistent;
-    bool fired;
-    char text[40];
+    int     eventTime;   // absolute RTC timestamp when this alert fires
+    uint8_t buzzCount;   // 0 = insistent (buzz loop until dismissed), N = vibMotor N pulses
+    bool    fired;
+    bool    preAlert;    // true = "In 5 min" warning, false = "Now" at event time
+    char    text[60];
 };
-RTC_DATA_ATTR CfAlert cfAlerts[10];
+RTC_DATA_ATTR CfAlert cfAlerts[20];       // doubled from 10 (two per event)
 RTC_DATA_ATTR int     cfAlertCount     = 0;
 RTC_DATA_ATTR bool    cfNotifActive    = false;
 RTC_DATA_ATTR bool    cfNotifInsistent = false;
+RTC_DATA_ATTR bool    cfNotifPreAlert  = false;
 RTC_DATA_ATTR char    cfNotifText[60]  = "";
 
 class CrispFace : public Watchy {
@@ -78,22 +80,25 @@ public:
             now = makeTime(currentTime);
         }
 
-        // Check alerts
+        // Check alerts (90s window — watch wakes every 60s, buffer without overlap)
         for (int i = 0; i < cfAlertCount; i++) {
             if (cfAlerts[i].fired) continue;
             int diff = cfAlerts[i].eventTime - now;
-            if (diff >= 0 && diff <= 300) {
+            if (diff >= 0 && diff <= 90) {
                 cfAlerts[i].fired = true;
-                if (cfAlerts[i].insistent) {
+                if (cfAlerts[i].buzzCount == 0) {
+                    // Insistent: show notification + buzz loop
                     cfNotifActive = true;
                     cfNotifInsistent = true;
+                    cfNotifPreAlert = cfAlerts[i].preAlert;
                     strncpy(cfNotifText, cfAlerts[i].text, 59);
                     cfNotifText[59] = '\0';
                     renderNotification();
                     insistentBuzzLoop();
                     return;
                 } else {
-                    vibMotor(75, 4);
+                    // Regular: buzz N times (1 for pre-alert, 3 for event)
+                    vibMotor(75, cfAlerts[i].buzzCount * 2);
                 }
             }
         }
@@ -126,6 +131,7 @@ public:
                 // Dismiss notification
                 cfNotifActive = false;
                 cfNotifInsistent = false;
+                cfNotifPreAlert = false;
                 cfNotifText[0] = '\0';
                 RTC.read(currentTime);
                 showWatchFace(true);
@@ -183,9 +189,9 @@ private:
         int16_t tx, ty;
         uint16_t tw, th;
 
-        // "ALERT" header centered near top
+        // Context-aware header centered near top
         display.setFont(&FreeSans9pt7b);
-        const char* header = "ALERT";
+        const char* header = cfNotifPreAlert ? "In 5 min" : "Now";
         display.getTextBounds(header, 0, 0, &tx, &ty, &tw, &th);
         display.setCursor((200 - (int)tw) / 2, 40);
         display.print(header);
@@ -219,6 +225,7 @@ private:
                 if (digitalRead(UP_BTN_PIN) == LOW || digitalRead(DOWN_BTN_PIN) == LOW) {
                     cfNotifActive = false;
                     cfNotifInsistent = false;
+                    cfNotifPreAlert = false;
                     cfNotifText[0] = '\0';
                     return;
                 }
@@ -473,7 +480,7 @@ private:
             cfSyncInterval = anyServerComp ? (maxServerStale > 300 ? maxServerStale : 300) : 86400;
             cfLastSync     = (int)makeTime(currentTime);
 
-            // Collect alerts from all faces
+            // Collect alerts from all faces — two per event (pre-alert + event-time)
             cfAlertCount = 0;
             int syncTime = cfLastSync;
             for (JsonObject face : faces) {
@@ -481,20 +488,40 @@ private:
                     JsonArray alerts = comp["alerts"].as<JsonArray>();
                     if (alerts.isNull()) continue;
                     for (JsonObject alert : alerts) {
-                        if (cfAlertCount >= 10) break;
                         int minFromNow = alert["min"] | 0;
                         if (minFromNow <= 0) continue;
-                        cfAlerts[cfAlertCount].eventTime = syncTime + (minFromNow * 60);
-                        cfAlerts[cfAlertCount].insistent = alert["ins"] | false;
-                        cfAlerts[cfAlertCount].fired = false;
+
+                        int evTime = syncTime + (minFromNow * 60);
+                        bool ins = alert["ins"] | false;
                         const char* txt = alert["text"] | "Event";
-                        strncpy(cfAlerts[cfAlertCount].text, txt, 39);
-                        cfAlerts[cfAlertCount].text[39] = '\0';
-                        cfAlertCount++;
+
+                        // 1. Pre-alert (5 min before event)
+                        if (cfAlertCount < 20) {
+                            cfAlerts[cfAlertCount].eventTime = evTime - 300;
+                            cfAlerts[cfAlertCount].buzzCount = ins ? 0 : 1;
+                            cfAlerts[cfAlertCount].fired = false;
+                            cfAlerts[cfAlertCount].preAlert = true;
+                            strncpy(cfAlerts[cfAlertCount].text, txt, 59);
+                            cfAlerts[cfAlertCount].text[59] = '\0';
+                            cfAlertCount++;
+                        }
+
+                        // 2. Event-time alert
+                        if (cfAlertCount < 20) {
+                            cfAlerts[cfAlertCount].eventTime = evTime;
+                            cfAlerts[cfAlertCount].buzzCount = ins ? 0 : 3;
+                            cfAlerts[cfAlertCount].fired = false;
+                            cfAlerts[cfAlertCount].preAlert = false;
+                            strncpy(cfAlerts[cfAlertCount].text, txt, 59);
+                            cfAlerts[cfAlertCount].text[59] = '\0';
+                            cfAlertCount++;
+                        }
+
+                        if (cfAlertCount >= 20) break;
                     }
-                    if (cfAlertCount >= 10) break;
+                    if (cfAlertCount >= 20) break;
                 }
-                if (cfAlertCount >= 10) break;
+                if (cfAlertCount >= 20) break;
             }
         }
 
@@ -713,19 +740,49 @@ private:
                                    : str.substring(idx, nl);
             idx = (nl < 0) ? str.length() + 1 : nl + 1;
 
-            display.getTextBounds(line.c_str(), 0, 0, &tx, &ty, &tw, &th);
+            // Check for circle marker bytes (all-day event indicators)
+            bool drawFilledCircle = false;
+            bool drawOpenCircle = false;
+            const char* linePtr = line.c_str();
+            if ((uint8_t)linePtr[0] == 0x01) { drawFilledCircle = true; linePtr++; }
+            else if ((uint8_t)linePtr[0] == 0x02) { drawOpenCircle = true; linePtr++; }
+            if ((drawFilledCircle || drawOpenCircle) && linePtr[0] == ' ') linePtr++;
+
+            // Use linePtr (marker stripped) for measurement
+            const char* measStr = (drawFilledCircle || drawOpenCircle) ? linePtr : line.c_str();
+            display.getTextBounds(measStr, 0, 0, &tx, &ty, &tw, &th);
+
+            // Account for circle width in alignment
+            int circleW = 0;
+            if (drawFilledCircle || drawOpenCircle) {
+                int cr = ascent / 4;
+                circleW = cr * 2 + 3;
+            }
+
             int curX;
             if (strcmp(align, "center") == 0)
-                curX = bx + (bw - (int)tw) / 2;
+                curX = bx + (bw - (int)tw - circleW) / 2;
             else if (strcmp(align, "right") == 0)
-                curX = bx + bw - (int)tw;
+                curX = bx + bw - (int)tw - circleW;
             else
                 curX = bx;
 
-            // Render glyph-by-glyph with pixel clipping to bounds
+            // Draw circle marker if present
             int penX = curX;
-            for (int i = 0; i < (int)line.length(); i++) {
-                uint8_t c = (uint8_t)line[i];
+            if (drawFilledCircle || drawOpenCircle) {
+                int cr = ascent / 4;
+                int cy = curY - ascent / 2;
+                int cx = curX + cr;
+                if (drawFilledCircle) display.fillCircle(cx, cy, cr, color);
+                else display.drawCircle(cx, cy, cr, color);
+                penX = curX + cr * 2 + 3;
+            }
+
+            // Render glyph-by-glyph with pixel clipping to bounds
+            int lineLen = (drawFilledCircle || drawOpenCircle) ? (int)strlen(linePtr) : (int)line.length();
+            const char* renderStr = (drawFilledCircle || drawOpenCircle) ? linePtr : line.c_str();
+            for (int i = 0; i < lineLen; i++) {
+                uint8_t c = (uint8_t)renderStr[i];
                 if (c < font->first || c > font->last) continue;
 
                 GFXglyph *gl = &font->glyph[c - font->first];
@@ -783,20 +840,47 @@ private:
                                    : str.substring(idx, nl);
             idx = (nl < 0) ? str.length() + 1 : nl + 1;
 
-            // Alignment
-            display.getTextBounds(line.c_str(), 0, 0, &tx, &ty, &tw, &th);
+            // Check for circle marker bytes (all-day event indicators)
+            bool drawFilledCircle = false;
+            bool drawOpenCircle = false;
+            const char* linePtr = line.c_str();
+            if ((uint8_t)linePtr[0] == 0x01) { drawFilledCircle = true; linePtr++; }
+            else if ((uint8_t)linePtr[0] == 0x02) { drawOpenCircle = true; linePtr++; }
+            if ((drawFilledCircle || drawOpenCircle) && linePtr[0] == ' ') linePtr++;
+
+            const char* measStr = (drawFilledCircle || drawOpenCircle) ? linePtr : line.c_str();
+            display.getTextBounds(measStr, 0, 0, &tx, &ty, &tw, &th);
+
+            int circleW = 0;
+            if (drawFilledCircle || drawOpenCircle) {
+                int cr = ascent / 4;
+                circleW = cr * 2 + 3;
+            }
+
             int baseX;
             if (strcmp(align, "center") == 0)
-                baseX = bx + (bw - (int)tw) / 2;
+                baseX = bx + (bw - (int)tw - circleW) / 2;
             else if (strcmp(align, "right") == 0)
-                baseX = bx + bw - (int)tw;
+                baseX = bx + bw - (int)tw - circleW;
             else
                 baseX = bx;
 
-            // Render each glyph with X shear
+            // Draw circle marker if present
             int penX = baseX;
-            for (int i = 0; i < (int)line.length(); i++) {
-                uint8_t c = (uint8_t)line[i];
+            if (drawFilledCircle || drawOpenCircle) {
+                int cr = ascent / 4;
+                int cy = curY - ascent / 2;
+                int cx = baseX + cr;
+                if (drawFilledCircle) display.fillCircle(cx, cy, cr, color);
+                else display.drawCircle(cx, cy, cr, color);
+                penX = baseX + cr * 2 + 3;
+            }
+
+            // Render each glyph with X shear
+            int lineLen = (drawFilledCircle || drawOpenCircle) ? (int)strlen(linePtr) : (int)line.length();
+            const char* renderStr = (drawFilledCircle || drawOpenCircle) ? linePtr : line.c_str();
+            for (int i = 0; i < lineLen; i++) {
+                uint8_t c = (uint8_t)renderStr[i];
                 if (c < font->first || c > font->last) continue;
 
                 GFXglyph *gl = &font->glyph[c - font->first];

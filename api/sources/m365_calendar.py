@@ -151,7 +151,7 @@ def format_events(events, detail, max_chars):
         # Prefix: all-day gets * (busy) or o (free), timed gets HH:MM
         if ev.get('all_day'):
             is_free = ev.get('transp') == 'TRANSPARENT'
-            prefix = 'o' if is_free else '*'
+            prefix = '\x02' if is_free else '\x01'
         else:
             prefix = ev['dtstart'].strftime('%H:%M')
 
@@ -253,9 +253,12 @@ if alert_enabled or insistent_enabled:
         minutes_from_now = int((dt - now).total_seconds() / 60)
         if minutes_from_now <= 0:
             continue
+        title = ev.get('summary', 'Event')
+        loc = ev.get('location', '')
+        alert_text = title if not loc else '{}\n@ {}'.format(title, loc)
         alerts.append({
             'min': minutes_from_now,
-            'text': ev.get('summary', 'Event')[:39],
+            'text': alert_text[:59],
             'ins': insistent_enabled
         })
     # Sort by nearest first, cap at 10
