@@ -182,15 +182,17 @@
         html += '<label for="prop-border-padding">Inset</label>';
         html += stepperHtml('prop-border-padding', bp, 0, 20) + '</div>';
 
-        // Text padding
+        // Text padding (only visible when border is set)
         var pt = d.padding_top || 0;
         var pl = d.padding_left || 0;
+        html += '<div id="prop-padding-section"' + (bw > 0 ? '' : ' style="display:none"') + '>';
         html += '<div class="prop-section-label">Padding</div>';
         html += '<div class="prop-row-inline">';
         html += '<div class="prop-row"><label for="prop-pad-top">Top</label>';
         html += stepperHtml('prop-pad-top', pt, 0, 50) + '</div>';
         html += '<div class="prop-row"><label for="prop-pad-left">Left</label>';
         html += stepperHtml('prop-pad-left', pl, 0, 50) + '</div>';
+        html += '</div>';
         html += '</div>';
 
         // Advanced section — only show fields relevant to this type
@@ -432,6 +434,8 @@
                 var delta = newInset - oldInset;
                 var paddingRow = document.getElementById('prop-padding-row');
                 if (paddingRow) paddingRow.style.display = bw > 0 ? '' : 'none';
+                var paddingSection = document.getElementById('prop-padding-section');
+                if (paddingSection) paddingSection.style.display = bw > 0 ? '' : 'none';
                 updateObject(currentObject, {
                     left: currentObject.left + delta,
                     top: currentObject.top + delta,

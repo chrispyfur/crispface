@@ -143,7 +143,7 @@
         // If already logged in, redirect
         api('GET', '/api/session.py').then(function (data) {
             if (data.authenticated) {
-                window.location.href = BASE_URL + '/dashboard.html';
+                window.location.href = BASE_URL + '/faces.html';
             }
         }).catch(function () {});
 
@@ -157,7 +157,7 @@
             api('POST', '/api/login.py', { username: username, password: password })
                 .then(function (data) {
                     if (data.success) {
-                        window.location.href = BASE_URL + '/dashboard.html';
+                        window.location.href = BASE_URL + '/faces.html';
                     } else {
                         errorEl.textContent = data.error || 'Login failed';
                         errorEl.style.display = 'block';
@@ -577,7 +577,7 @@
             var watchId = params.get('id');
 
             if (!watchId) {
-                window.location.href = BASE_URL + '/dashboard.html';
+                window.location.href = BASE_URL + '/faces.html';
                 return;
             }
 
@@ -641,7 +641,7 @@
                         if (localStorage.getItem('crispface_current_watch') === watchId) {
                             localStorage.removeItem('crispface_current_watch');
                         }
-                        window.location.href = BASE_URL + '/dashboard.html';
+                        window.location.href = BASE_URL + '/faces.html';
                     }
                 });
             });
@@ -656,7 +656,7 @@
 
                 if (!watchResp.success || !watchResp.watch) {
                     alert('Watch not found');
-                    window.location.href = BASE_URL + '/dashboard.html';
+                    window.location.href = BASE_URL + '/faces.html';
                     return;
                 }
 
