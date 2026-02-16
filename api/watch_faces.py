@@ -15,7 +15,7 @@ from config import DATA_DIR
 API_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Local complication types — rendered on-device from RTC/ADC
-LOCAL_TYPES = {'time', 'date', 'battery'}
+LOCAL_TYPES = {'time', 'date', 'battery', 'version'}
 
 
 def respond(data, status='200 OK'):

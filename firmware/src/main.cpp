@@ -699,6 +699,9 @@ private:
                      currentTime.Hour, currentTime.Minute);
             return String(buf);
         }
+        if (strcmp(type, "version") == 0) {
+            return String("v" CRISPFACE_VERSION);
+        }
         if (strcmp(type, "date") == 0) {
             static const char* days[] =
                 {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
