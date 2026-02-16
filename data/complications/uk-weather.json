@@ -7,7 +7,7 @@
         {"name": "apikey", "label": "API Key", "default": "REDACTED_METOFFICE_API_KEY"},
         {"name": "town", "label": "Town", "default": "Derby"},
         {"name": "display", "label": "Display", "type": "select",
-         "options": "summary,temp,feels,conditions,wind,humidity,uv,precip,detail"}
+         "options": "summary,temp,feels,conditions,wind,humidity,uv,precip,detail,icon,rainstop"}
     ],
     "created_at": "2026-02-16T00:00:00+00:00",
     "updated_at": "2026-02-16T00:00:00+00:00"

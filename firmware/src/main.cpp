@@ -763,6 +763,13 @@ private:
             val = batVal.c_str();
         }
 
+        // Weather icon: value starts with "icon:"
+        if (strncmp(val, "icon:", 5) == 0) {
+            int weatherCode = atoi(val + 5);
+            drawWeatherIcon(weatherCode, tx, ty, tw, th, color);
+            return;
+        }
+
         if (isStale) {
             drawItalic(val, tx, ty, tw, th, al, font, color);
         } else {
@@ -836,6 +843,141 @@ private:
             snprintf(buf, sizeof(buf), "%.1fV", v);
         }
         return String(buf);
+    }
+
+    // ---- Weather icons ----
+
+    void drawCloudShape(int cx, int cy, int s, uint16_t color) {
+        // Cloud from overlapping circles + flat base
+        int r1 = s * 3 / 10;  // main bump
+        int r2 = s / 4;       // side bumps
+        int baseH = s / 5;
+        int baseW = s * 3 / 4;
+        int baseY = cy + r2 / 2;
+        // Flat base
+        display.fillRect(cx - baseW / 2, baseY, baseW, baseH, color);
+        // Left bump
+        display.fillCircle(cx - baseW / 4, baseY, r2, color);
+        // Center bump (taller)
+        display.fillCircle(cx, baseY - r1 / 3, r1, color);
+        // Right bump
+        display.fillCircle(cx + baseW / 4, baseY, r2 - 1, color);
+    }
+
+    void drawSunIcon(int cx, int cy, int s, uint16_t color) {
+        int r = s / 5;
+        display.fillCircle(cx, cy, r, color);
+        // 8 rays using integer offsets (x10 scale: 10,0 / 7,7 / 0,10 / etc.)
+        const int dx[] = {10, 7, 0, -7, -10, -7, 0, 7};
+        const int dy[] = {0, -7, -10, -7, 0, 7, 10, 7};
+        int inner = r + 2;
+        int outer = r * 2;
+        for (int i = 0; i < 8; i++) {
+            int x1 = cx + dx[i] * inner / 10;
+            int y1 = cy + dy[i] * inner / 10;
+            int x2 = cx + dx[i] * outer / 10;
+            int y2 = cy + dy[i] * outer / 10;
+            display.drawLine(x1, y1, x2, y2, color);
+        }
+    }
+
+    void drawPartCloudIcon(int cx, int cy, int s, uint16_t color) {
+        // Small sun upper-right
+        drawSunIcon(cx + s / 5, cy - s / 5, s * 2 / 3, color);
+        // Cloud lower-left, overlapping
+        drawCloudShape(cx - s / 8, cy + s / 8, s * 3 / 4, color);
+    }
+
+    void drawFogIcon(int x, int y, int w, int h, uint16_t color) {
+        // Horizontal lines at different heights
+        int lineH = h / 6;
+        int pad = w / 8;
+        for (int i = 1; i <= 4; i++) {
+            int ly = y + i * h / 5;
+            int lx = x + pad + (i % 2 == 0 ? pad / 2 : 0);
+            int lw = w - pad * 2 - (i % 2 == 0 ? pad / 2 : 0);
+            display.drawLine(lx, ly, lx + lw, ly, color);
+            if (lineH > 1) {
+                display.drawLine(lx, ly + 1, lx + lw, ly + 1, color);
+            }
+        }
+    }
+
+    void drawRainDrops(int cx, int cy, int s, int count, uint16_t color) {
+        int dropH = s / 6;
+        int spacing = s / (count + 1);
+        int startX = cx - (count - 1) * spacing / 2;
+        for (int i = 0; i < count; i++) {
+            int dx = startX + i * spacing;
+            // Slight angle on drops
+            display.drawLine(dx, cy, dx - 1, cy + dropH, color);
+            display.drawLine(dx + 1, cy, dx, cy + dropH, color);
+        }
+    }
+
+    void drawSnowDots(int cx, int cy, int s, uint16_t color) {
+        int spacing = s / 4;
+        int startX = cx - spacing;
+        // Two rows of dots
+        for (int row = 0; row < 2; row++) {
+            int dy = cy + row * spacing;
+            int offset = row * spacing / 2;
+            for (int i = 0; i < 3 - row; i++) {
+                int dx = startX + offset + i * spacing;
+                display.fillCircle(dx, dy, 1, color);
+            }
+        }
+    }
+
+    void drawLightningBolt(int cx, int cy, int s, uint16_t color) {
+        int bh = s * 2 / 5;
+        int bw = s / 6;
+        // Zigzag: top-right → center-left → center-right → bottom-left
+        display.drawLine(cx + bw, cy, cx - bw / 2, cy + bh / 2, color);
+        display.drawLine(cx - bw / 2, cy + bh / 2, cx + bw / 2, cy + bh / 2, color);
+        display.drawLine(cx + bw / 2, cy + bh / 2, cx - bw, cy + bh, color);
+        // Thicken
+        display.drawLine(cx + bw + 1, cy, cx - bw / 2 + 1, cy + bh / 2, color);
+        display.drawLine(cx + bw / 2 + 1, cy + bh / 2, cx - bw + 1, cy + bh, color);
+    }
+
+    void drawWeatherIcon(int code, int x, int y, int w, int h, uint16_t color) {
+        int cx = x + w / 2;
+        int cy = y + h / 2;
+        int s = (w < h) ? w : h;
+
+        if (code <= 1) {
+            // Clear / Sunny
+            drawSunIcon(cx, cy, s, color);
+        } else if (code <= 3) {
+            // Partly cloudy
+            drawPartCloudIcon(cx, cy, s, color);
+        } else if (code <= 6) {
+            // Mist / Fog
+            drawFogIcon(x, y, w, h, color);
+        } else if (code <= 8) {
+            // Cloudy / Overcast
+            drawCloudShape(cx, cy - s / 8, s, color);
+        } else if (code <= 12) {
+            // Light rain / showers / drizzle
+            drawCloudShape(cx, cy - s / 4, s, color);
+            drawRainDrops(cx, cy + s / 5, s, 3, color);
+        } else if (code <= 15) {
+            // Heavy rain / heavy showers
+            drawCloudShape(cx, cy - s / 4, s, color);
+            drawRainDrops(cx, cy + s / 5, s, 5, color);
+        } else if (code <= 27) {
+            // Sleet, hail, snow
+            drawCloudShape(cx, cy - s / 4, s, color);
+            drawSnowDots(cx, cy + s / 5, s, color);
+        } else if (code <= 30) {
+            // Thunder
+            drawCloudShape(cx, cy - s / 4, s, color);
+            drawLightningBolt(cx, cy + s / 6, s, color);
+        } else {
+            // Unknown — just draw a cloud
+            drawCloudShape(cx, cy - s / 8, s, color);
+        }
     }
 
     // ---- Local complication values ----

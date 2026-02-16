@@ -2,6 +2,7 @@
 """UK weather data source using Met Office DataHub API.
 Accepts ?apikey=KEY&town=Derby&display=summary parameters."""
 import sys, os, json, time, math, urllib.request, urllib.parse, urllib.error
+from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
@@ -27,6 +28,9 @@ WEATHER_CODES = {
     28: 'Thunder shwrs', 29: 'Thunder shwrs', 30: 'Thunder',
 }
 
+# Precipitation weather codes (rain, sleet, hail, snow)
+PRECIP_CODES = set(range(9, 28))
+
 # 16-point compass from degrees
 COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
            'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
@@ -49,18 +53,67 @@ def find_town(name, towns):
             return t
     return None
 
-def format_value(display, ts):
-    temp = ts.get('screenTemperature', 0)
-    feels = ts.get('feelsLikeTemperature', 0)
-    code = ts.get('significantWeatherCode', 0)
+def utc_to_uk_hour(dt_utc):
+    """Convert UTC datetime to UK local time string like '3pm'."""
+    year = dt_utc.year
+    # BST: last Sunday in March 01:00 UTC to last Sunday in October 01:00 UTC
+    mar31 = datetime(year, 3, 31, 1, 0, tzinfo=timezone.utc)
+    while mar31.weekday() != 6:
+        mar31 -= timedelta(days=1)
+    oct31 = datetime(year, 10, 31, 1, 0, tzinfo=timezone.utc)
+    while oct31.weekday() != 6:
+        oct31 -= timedelta(days=1)
+    if mar31 <= dt_utc < oct31:
+        dt_local = dt_utc + timedelta(hours=1)
+    else:
+        dt_local = dt_utc
+    hour = dt_local.hour
+    if hour == 0:
+        return '12am'
+    elif hour < 12:
+        return '{}am'.format(hour)
+    elif hour == 12:
+        return '12pm'
+    else:
+        return '{}pm'.format(hour - 12)
+
+def format_rainstop(current, series):
+    """Predict when rain will stop based on future hourly data."""
+    cur_precip = current.get('probOfPrecipitation', 0)
+    cur_code = current.get('significantWeatherCode', 0)
+    is_raining = cur_precip >= 50 or cur_code in PRECIP_CODES
+
+    if not is_raining:
+        return 'Dry'
+
+    for entry in series:
+        precip = entry.get('probOfPrecipitation', 0)
+        code = entry.get('significantWeatherCode', 0)
+        if precip < 30 and code not in PRECIP_CODES:
+            t_str = entry.get('time', '')
+            try:
+                dt = datetime.fromisoformat(t_str.replace('Z', '+00:00'))
+                return 'Dry by {}'.format(utc_to_uk_hour(dt))
+            except Exception:
+                return 'Dry soon'
+
+    return 'Rain 12h+'
+
+def format_value(display, data):
+    current = data.get('current', data)
+    series = data.get('series', [])
+
+    temp = current.get('screenTemperature', 0)
+    feels = current.get('feelsLikeTemperature', 0)
+    code = current.get('significantWeatherCode', 0)
     conditions = WEATHER_CODES.get(code, 'Unknown')
-    wind_speed = ts.get('windSpeed10m', 0)
-    wind_deg = ts.get('windDirectionFrom10m', 0)
+    wind_speed = current.get('windSpeed10m', 0)
+    wind_deg = current.get('windDirectionFrom10m', 0)
     wind_dir = wind_direction(wind_deg)
     wind_mph = round(wind_speed * 2.237)  # m/s to mph
-    humidity = ts.get('screenRelativeHumidity', 0)
-    uv = ts.get('uvIndex', 0)
-    precip = ts.get('probOfPrecipitation', 0)
+    humidity = current.get('screenRelativeHumidity', 0)
+    uv = current.get('uvIndex', 0)
+    precip = current.get('probOfPrecipitation', 0)
 
     if display == 'temp':
         return '{:.0f}\u00b0C'.format(temp)
@@ -79,6 +132,10 @@ def format_value(display, ts):
     elif display == 'detail':
         return '{:.0f}\u00b0 {}\nWind {}mph\nRain {:.0f}%'.format(
             temp, conditions, wind_mph, precip)
+    elif display == 'icon':
+        return 'icon:{}'.format(code)
+    elif display == 'rainstop':
+        return format_rainstop(current, series)
     else:  # summary
         return '{:.0f}\u00b0 {}'.format(temp, conditions)
 
@@ -111,6 +168,7 @@ cache_file = os.path.join(CACHE_DIR, 'ukweather_' + cache_key + '.json')
 
 
 def fetch_weather():
+    """Fetch hourly forecast. Returns {current: {...}, series: [...]} or {_error: msg}."""
     url = (
         'https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly'
         '?latitude={}&longitude={}'
@@ -123,31 +181,34 @@ def fetch_weather():
         req.add_header('Accept', 'application/json')
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
-        # Navigate GeoJSON: features[0].properties.timeSeries[0]
+        # Navigate GeoJSON: features[0].properties.timeSeries
         features = data.get('features', [])
         if not features:
             return {'_error': 'No data'}
         props = features[0].get('properties', {})
-        series = props.get('timeSeries', [])
-        if not series:
+        all_series = props.get('timeSeries', [])
+        if not all_series:
             return {'_error': 'No forecast'}
-        # Find closest entry to current time
+        # Split into current and future entries
         now = time.time()
-        best = series[0]
-        for entry in series:
+        current = all_series[0]
+        future = []
+        found_current = False
+        for entry in all_series:
             t_str = entry.get('time', '')
             try:
-                from datetime import datetime
                 dt = datetime.fromisoformat(t_str.replace('Z', '+00:00'))
                 entry_ts = dt.timestamp()
                 if entry_ts <= now:
-                    best = entry
+                    current = entry
+                    found_current = True
                 else:
-                    break
+                    future.append(entry)
             except Exception:
-                best = entry
+                if not found_current:
+                    current = entry
                 break
-        return best
+        return {'current': current, 'series': future}
     except urllib.error.HTTPError as e:
         sys.stderr.write('uk_weather: HTTP {}: {}\n'.format(e.code, e.reason))
         if e.code in (401, 403):
@@ -187,29 +248,29 @@ def save_cache(data):
 # Main
 cached = get_cached()
 if cached:
-    ts = cached
+    weather_data = cached
 else:
-    ts = fetch_weather()
-    if ts and '_error' not in ts:
-        save_cache(ts)
-    elif ts and '_error' in ts:
+    weather_data = fetch_weather()
+    if weather_data and '_error' not in weather_data:
+        save_cache(weather_data)
+    elif weather_data and '_error' in weather_data:
         # API returned an error — try stale cache before giving up
-        error_msg = ts['_error']
-        ts = None
+        error_msg = weather_data['_error']
+        weather_data = None
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, 'r') as f:
-                    ts = json.load(f)
+                    weather_data = json.load(f)
             except Exception:
                 pass
-        if not ts:
+        if not weather_data:
             print('Content-Type: application/json')
             print()
             print(json.dumps({'value': error_msg}))
             sys.exit(0)
 
-if ts:
-    value = format_value(display, ts)
+if weather_data:
+    value = format_value(display, weather_data)
 else:
     value = 'Weather unavailable'
 
