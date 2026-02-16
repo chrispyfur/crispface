@@ -177,7 +177,7 @@ def _validate_complication(c):
         for k, v in raw_params.items():
             key = re.sub(r'[^a-zA-Z0-9_-]', '', str(k))[:50]
             if key:
-                validated_params[key] = str(v)[:200]
+                validated_params[key] = str(v)[:2000]
         if validated_params:
             result['params'] = validated_params
 
