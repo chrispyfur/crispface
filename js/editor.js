@@ -114,7 +114,8 @@
             });
             if (obj.crispfaceData) {
                 var inset = getInset(obj.crispfaceData);
-                obj.crispfaceData.h = h + inset * 2; // store outer height
+                var pTop = obj.crispfaceData.padding_top || 0;
+                obj.crispfaceData.h = h + inset * 2 + pTop; // store outer height
                 if (obj.clipPath) {
                     obj.clipPath.set({ width: w, height: h });
                 }
@@ -152,9 +153,11 @@
                 if (bw > 0) {
                     var br = d.border_radius || 0;
                     var ins = getInset(d);
-                    var bx = Math.round(obj.left) - ins;
-                    var by = Math.round(obj.top) - ins;
-                    var bww = Math.round(obj.width * (obj.scaleX || 1)) + ins * 2;
+                    var pL = d.padding_left || 0;
+                    var pT = d.padding_top || 0;
+                    var bx = Math.round(obj.left) - ins - pL;
+                    var by = Math.round(obj.top) - ins - pT;
+                    var bww = Math.round(obj.width * (obj.scaleX || 1)) + ins * 2 + pL;
                     var bh = d.h || Math.round(obj.height * (obj.scaleY || 1));
 
                     ctx.save();
@@ -236,13 +239,17 @@
     // Enforce canvas bounds (uses outer complication bounds including border+padding)
     function enforceBounds(obj) {
         var inset = obj.crispfaceData ? getInset(obj.crispfaceData) : 0;
+        var padLeft = obj.crispfaceData ? (obj.crispfaceData.padding_left || 0) : 0;
+        var padTop = obj.crispfaceData ? (obj.crispfaceData.padding_top || 0) : 0;
+        var totalL = inset + padLeft;
+        var totalT = inset + padTop;
         var fabricW = Math.round(obj.width * (obj.scaleX || 1));
         var outerH = obj.crispfaceData ? obj.crispfaceData.h : Math.round(obj.height * (obj.scaleY || 1));
 
-        if (obj.left - inset < 0) obj.set('left', inset);
-        if (obj.top - inset < 0) obj.set('top', inset);
-        if (obj.left + fabricW + inset > 200) obj.set('left', Math.max(inset, 200 - fabricW - inset));
-        if (obj.top - inset + outerH > 200) obj.set('top', Math.max(inset, 200 - outerH + inset));
+        if (obj.left - totalL < 0) obj.set('left', totalL);
+        if (obj.top - totalT < 0) obj.set('top', totalT);
+        if (obj.left + fabricW + inset > 200) obj.set('left', Math.max(totalL, 200 - fabricW - inset));
+        if (obj.top - totalT + outerH > 200) obj.set('top', Math.max(totalT, 200 - outerH + totalT));
     }
 
     // Get crispface data from currently selected object (returns outer bounds)
@@ -250,12 +257,14 @@
         var obj = canvas.getActiveObject();
         if (!obj || !obj.crispfaceData) return null;
         var inset = getInset(obj.crispfaceData);
+        var padLeft = obj.crispfaceData.padding_left || 0;
+        var padTop = obj.crispfaceData.padding_top || 0;
         return {
             object: obj,
             data: obj.crispfaceData,
-            left: Math.round(obj.left) - inset,
-            top: Math.round(obj.top) - inset,
-            width: Math.round(obj.width * (obj.scaleX || 1)) + inset * 2,
+            left: Math.round(obj.left) - inset - padLeft,
+            top: Math.round(obj.top) - inset - padTop,
+            width: Math.round(obj.width * (obj.scaleX || 1)) + inset * 2 + padLeft,
             height: obj.crispfaceData.h
         };
     }
@@ -276,12 +285,14 @@
 
         var compH = data.h || 40;
         var inset = (data.border_width || 0) > 0 ? (data.border_width || 0) + (data.border_padding || 0) : 0;
-        var innerW = Math.max((data.w || 80) - inset * 2, 1);
-        var innerH = Math.max(compH - inset * 2, 1);
+        var padLeft = data.padding_left || 0;
+        var padTop = data.padding_top || 0;
+        var innerW = Math.max((data.w || 80) - inset * 2 - padLeft, 1);
+        var innerH = Math.max(compH - inset * 2 - padTop, 1);
 
         var text = new fabric.Textbox(content.value || 'Text', {
-            left: (data.x || 10) + inset,
-            top: (data.y || 10) + inset,
+            left: (data.x || 10) + inset + padLeft,
+            top: (data.y || 10) + inset + padTop,
             width: innerW,
             height: innerH,
             fontSize: displaySize,
@@ -315,6 +326,8 @@
             border_width: data.border_width || 0,
             border_radius: data.border_radius || 0,
             border_padding: data.border_padding || 0,
+            padding_top: padTop,
+            padding_left: padLeft,
             content: {
                 value: content.value || 'Text',
                 family: content.family || 'sans-serif',
@@ -339,7 +352,8 @@
         text.initDimensions = function () {
             origInitDimensions();
             var ins = getInset(this.crispfaceData);
-            this.height = Math.max(this.crispfaceData.h - ins * 2, 1);
+            var pTop = this.crispfaceData.padding_top || 0;
+            this.height = Math.max(this.crispfaceData.h - ins * 2 - pTop, 1);
             // Keep clipPath in sync with inner dimensions
             if (this.clipPath) {
                 this.clipPath.set({
@@ -487,19 +501,23 @@
             if (d.source) contentOut.source = d.source;
 
             var inset = getInset(d);
+            var padLeft = d.padding_left || 0;
+            var padTop = d.padding_top || 0;
             var comp = {
                 complication_id: d.complication_id,
                 complication_type: d.complication_type || '',
                 type: d.type,
-                x: Math.round(obj.left) - inset,
-                y: Math.round(obj.top) - inset,
-                w: Math.round(obj.width * (obj.scaleX || 1)) + inset * 2,
+                x: Math.round(obj.left) - inset - padLeft,
+                y: Math.round(obj.top) - inset - padTop,
+                w: Math.round(obj.width * (obj.scaleX || 1)) + inset * 2 + padLeft,
                 h: d.h,
                 stale_seconds: d.stale_seconds,
                 stale_enabled: d.stale_enabled !== false,
                 border_width: d.border_width || 0,
                 border_radius: d.border_radius || 0,
                 border_padding: d.border_padding || 0,
+                padding_top: padTop,
+                padding_left: padLeft,
                 content: contentOut,
                 sort_order: i
             };
