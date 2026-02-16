@@ -1,3 +1,41 @@
+/* Watch fonts — same FreeFonts used by GFX firmware for pixel-accurate preview */
+@font-face {
+    font-family: 'CrispSans';
+    src: url('/crispface/firmware/tools/fonts/FreeSans.ttf') format('truetype');
+    font-weight: normal;
+    font-display: block;
+}
+@font-face {
+    font-family: 'CrispSans';
+    src: url('/crispface/firmware/tools/fonts/FreeSansBold.ttf') format('truetype');
+    font-weight: bold;
+    font-display: block;
+}
+@font-face {
+    font-family: 'CrispMono';
+    src: url('/crispface/firmware/tools/fonts/FreeMono.ttf') format('truetype');
+    font-weight: normal;
+    font-display: block;
+}
+@font-face {
+    font-family: 'CrispMono';
+    src: url('/crispface/firmware/tools/fonts/FreeMonoBold.ttf') format('truetype');
+    font-weight: bold;
+    font-display: block;
+}
+@font-face {
+    font-family: 'CrispSerif';
+    src: url('/crispface/firmware/tools/fonts/FreeSerif.ttf') format('truetype');
+    font-weight: normal;
+    font-display: block;
+}
+@font-face {
+    font-family: 'CrispSerif';
+    src: url('/crispface/firmware/tools/fonts/FreeSerifBold.ttf') format('truetype');
+    font-weight: bold;
+    font-display: block;
+}
+
 /* Reset */
 *, *::before, *::after {
     margin: 0;

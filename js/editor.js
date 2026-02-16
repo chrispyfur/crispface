@@ -70,6 +70,13 @@
 
     var ALIGNS = ['left', 'center', 'right'];
 
+    // Map editor font families to @font-face web fonts (same TTFs as GFX firmware)
+    var CANVAS_FONT = {
+        'sans-serif': 'CrispSans',
+        'monospace': 'CrispMono',
+        'serif': 'CrispSerif'
+    };
+
     // Compute text inset from border + padding (0 when no border)
     function getInset(d) {
         var bw = d.border_width || 0;
@@ -83,6 +90,7 @@
     window.CRISPFACE.DISPLAY_SIZE_MAP = DISPLAY_SIZE_MAP;
     window.CRISPFACE.GFX_METRICS = GFX_METRICS;
     window.CRISPFACE.getGfxMetrics = getGfxMetrics;
+    window.CRISPFACE.CANVAS_FONT = CANVAS_FONT;
     window.CRISPFACE.ALIGNS = ALIGNS;
     window.CRISPFACE.getInset = getInset;
 
@@ -270,18 +278,21 @@
                     var content = d.content;
                     var gfx = getGfxMetrics(content.family, content.size, content.bold);
                     var weight = content.bold ? 'bold ' : '';
+                    var cfFont = CANVAS_FONT[content.family] || 'CrispSans';
 
                     // Fill inner area with background (occludes overlapping complications)
                     ctx.fillStyle = bg;
                     ctx.fillRect(ix, iy, iw, ih);
 
-                    // Set font — use GFX th as CSS font-size so glyphs fill the same height
-                    ctx.font = weight + gfx.th + 'px ' + content.family;
+                    // Set font — use actual FreeFonts via @font-face, gfx.th as font-size
+                    ctx.font = weight + gfx.th + 'px ' + cfFont;
                     ctx.fillStyle = col;
                     ctx.textBaseline = 'alphabetic';
 
-                    // Use pre-computed GFX ascent/descent (not browser measureText)
-                    var ascent = gfx.ascent;
+                    // Measure ascent from browser using the actual FreeFont
+                    // (accurate since it's the same font the firmware uses)
+                    var metrics = ctx.measureText('Ay');
+                    var ascent = Math.round(metrics.actualBoundingBoxAscent);
                     var lineH = gfx.th + 2; // firmware: th + 2
 
                     // Clip to inner bounds
@@ -298,7 +309,6 @@
 
                     for (var li = 0; li < lines.length; li++) {
                         if (curY - ascent >= iy + ih) break;
-                        // Use advance width for alignment (firmware uses getTextBounds tw)
                         var lineW = ctx.measureText(lines[li]).width;
                         var curX;
                         if (align === 'center') {
@@ -320,6 +330,11 @@
         loadFace(CF.faceData);
 
         window.CRISPFACE.canvas = canvas;
+
+        // Re-render once web fonts are loaded (first render may use fallback)
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(function () { canvas.renderAll(); });
+        }
 
         // Start live polling for complications with sources
         startLivePolling();
