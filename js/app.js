@@ -450,16 +450,14 @@
         var list = document.getElementById('variables-list');
         list.innerHTML = '';
         if (variables.length > 0) {
-            var header = document.createElement('div');
-            header.className = 'var-row-header';
-            header.innerHTML =
-                '<span class="var-col-label">Name</span>' +
-                '<span class="var-col-label">Label</span>' +
-                '<span class="var-col-label var-col-type">Type</span>' +
-                '<span class="var-col-label">Default</span>' +
-                '<span class="var-col-label">Options</span>' +
-                '<span class="var-col-spacer"></span>';
-            list.appendChild(header);
+            var table = document.createElement('table');
+            table.className = 'var-table';
+            table.innerHTML =
+                '<thead><tr>' +
+                '<th>Name</th><th>Label</th><th class="col-type">Type</th>' +
+                '<th>Default</th><th>Options</th><th class="col-remove"></th>' +
+                '</tr></thead><tbody></tbody>';
+            list.appendChild(table);
             for (var i = 0; i < variables.length; i++) {
                 addVariableRow(variables[i].name, variables[i].label, variables[i].default, variables[i].type || 'text', variables[i].options || '');
             }
@@ -474,29 +472,44 @@
         var noVars = list.querySelector('.no-selection');
         if (noVars) noVars.remove();
 
+        // Ensure table exists
+        var table = list.querySelector('.var-table');
+        if (!table) {
+            table = document.createElement('table');
+            table.className = 'var-table';
+            table.innerHTML =
+                '<thead><tr>' +
+                '<th>Name</th><th>Label</th><th class="col-type">Type</th>' +
+                '<th>Default</th><th>Options</th><th class="col-remove"></th>' +
+                '</tr></thead><tbody></tbody>';
+            list.appendChild(table);
+        }
+        var tbody = table.querySelector('tbody');
+
         var type = varType || 'text';
-        var row = document.createElement('div');
+        var row = document.createElement('tr');
         row.className = 'var-row';
         row.innerHTML =
-            '<input type="text" placeholder="name" class="var-name" value="' + escHtml(name || '') + '" />' +
-            '<input type="text" placeholder="label" class="var-label" value="' + escHtml(label || '') + '" />' +
-            '<select class="var-type">' +
+            '<td><input type="text" placeholder="name" class="var-name" value="' + escHtml(name || '') + '" /></td>' +
+            '<td><input type="text" placeholder="label" class="var-label" value="' + escHtml(label || '') + '" /></td>' +
+            '<td class="col-type"><select class="var-type">' +
                 '<option value="text"' + (type === 'text' ? ' selected' : '') + '>Text</option>' +
                 '<option value="checkbox"' + (type === 'checkbox' ? ' selected' : '') + '>Checkbox</option>' +
                 '<option value="select"' + (type === 'select' ? ' selected' : '') + '>Select</option>' +
-            '</select>' +
-            '<input type="text" placeholder="default" class="var-default" value="' + escHtml(defaultVal || '') + '" />' +
-            '<input type="text" placeholder="a,b,c" class="var-options" value="' + escHtml(options || '') + '" />' +
-            '<button type="button" class="btn btn-danger btn-sm var-remove">&times;</button>';
+            '</select></td>' +
+            '<td><input type="text" placeholder="default" class="var-default" value="' + escHtml(defaultVal || '') + '" /></td>' +
+            '<td><input type="text" placeholder="a,b,c" class="var-options" value="' + escHtml(options || '') + '" /></td>' +
+            '<td class="col-remove"><button type="button" class="btn btn-danger btn-sm var-remove">&times;</button></td>';
 
         row.querySelector('.var-remove').addEventListener('click', function () {
             row.remove();
-            if (list.children.length === 0) {
+            if (tbody.children.length === 0) {
+                table.remove();
                 list.innerHTML = '<p class="no-selection">No variables defined</p>';
             }
         });
 
-        list.appendChild(row);
+        tbody.appendChild(row);
     }
 
     function collectVariables() {
