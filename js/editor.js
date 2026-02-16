@@ -64,20 +64,8 @@
         return GFX_METRICS[key] || { th: size, ascent: Math.round(size * 0.75) };
     }
 
-    // CSS em-square size for each stored size. Fontconvert uses 141 DPI,
-    // so em_px = gfx_pt * 141/72. Same for all font families.
-    // Using gfx.th as font-size is WRONG — it's the Ay bbox height, not the
-    // em-square. Mono glyphs only fill ~75% of em, causing 25% size error.
-    var GFX_EM_SIZE = {
-        8: 17.625, 12: 17.625,
-        16: 23.5,
-        24: 35.25,
-        48: 47,
-        60: 70.5,
-        72: 94
-    };
-
-    // Legacy alias for properties.js backward compat
+    // DISPLAY_SIZE_MAP kept for backward compat — maps stored size to FreeSans th.
+    // The after:render code now uses getGfxMetrics() for per-font accuracy.
     var DISPLAY_SIZE_MAP = { 8: 17, 12: 17, 16: 23, 24: 34, 48: 44, 60: 67, 72: 89 };
 
     var ALIGNS = ['left', 'center', 'right'];
@@ -296,9 +284,8 @@
                     ctx.fillStyle = bg;
                     ctx.fillRect(ix, iy, iw, ih);
 
-                    // Set font — use actual FreeFonts at correct em-square size
-                    var emSize = GFX_EM_SIZE[content.size] || gfx.th;
-                    ctx.font = weight + emSize + 'px ' + cfFont;
+                    // Set font — use actual FreeFonts via @font-face, gfx.th as font-size
+                    ctx.font = weight + gfx.th + 'px ' + cfFont;
                     ctx.fillStyle = col;
                     ctx.textBaseline = 'alphabetic';
 
