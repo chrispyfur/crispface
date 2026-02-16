@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
 CACHE_DIR = os.path.join(DATA_DIR, 'cache')
-CACHE_MAX_AGE = 300  # 5 minutes
+CACHE_MAX_AGE = 60  # 5 minutes ( 1 minute for testing)
 
 # Parse query parameters
 qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
