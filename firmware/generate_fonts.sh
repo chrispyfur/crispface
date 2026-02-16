@@ -40,8 +40,8 @@ fi
 
 mkdir -p "$OUT_DIR"
 
-# Font families to generate
-TTF_NAMES=(FreeSans FreeSansBold FreeMono FreeMonoBold FreeSerif FreeSerifBold)
+# Font families to generate (Sans + Serif only — mono uses Tamzen bitmap font)
+TTF_NAMES=(FreeSans FreeSansBold FreeSerif FreeSerifBold)
 
 for SIZE in "${SIZES[@]}"; do
     echo "=== Generating ${SIZE}pt fonts ==="
@@ -59,6 +59,34 @@ for SIZE in "${SIZES[@]}"; do
         "$FONTCONVERT" "$ttf_path" "$SIZE" "$FIRST_CHAR" "$LAST_CHAR" > "$out_path"
         echo "  -> $out_path"
     done
+done
+
+# Generate Tamzen bitmap fonts (monospace) from BDF sources
+echo "=== Generating Tamzen bitmap fonts ==="
+BDF2GFX="tools/bdf2gfx.py"
+TAMZEN_DIR="$FONT_DIR/tamzen/bdf"
+
+# source_bdf font_name scale
+TAMZEN_FONTS=(
+    "Tamzen7x13r.bdf  Tamzen13x1      1"
+    "Tamzen7x13b.bdf  Tamzen13x1Bold  1"
+    "Tamzen8x16r.bdf  Tamzen16x1      1"
+    "Tamzen8x16b.bdf  Tamzen16x1Bold  1"
+    "Tamzen7x13r.bdf  Tamzen26x2      2"
+    "Tamzen7x13b.bdf  Tamzen26x2Bold  2"
+    "Tamzen8x16r.bdf  Tamzen32x2      2"
+    "Tamzen8x16b.bdf  Tamzen32x2Bold  2"
+    "Tamzen10x20r.bdf Tamzen60x3      3"
+    "Tamzen10x20b.bdf Tamzen60x3Bold  3"
+    "Tamzen10x20r.bdf Tamzen80x4      4"
+    "Tamzen10x20b.bdf Tamzen80x4Bold  4"
+)
+
+for entry in "${TAMZEN_FONTS[@]}"; do
+    read -r bdf_file font_name scale <<< "$entry"
+    echo "Generating ${font_name}..."
+    python3 "$BDF2GFX" "$TAMZEN_DIR/$bdf_file" "$font_name" --scale "$scale" -o "$OUT_DIR/${font_name}.h"
+    echo "  -> $OUT_DIR/${font_name}.h"
 done
 
 echo "Done. Generated $(ls "$OUT_DIR"/*.h 2>/dev/null | wc -l) font headers."

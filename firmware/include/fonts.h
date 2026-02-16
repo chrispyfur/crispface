@@ -14,10 +14,19 @@
 #include <Fonts/FreeSansBold18pt7b.h>
 #include <Fonts/FreeSansBold24pt7b.h>
 
-#include <Fonts/FreeMono9pt7b.h>
-#include <Fonts/FreeMono12pt7b.h>
-#include <Fonts/FreeMono18pt7b.h>
-#include <Fonts/FreeMono24pt7b.h>
+// Tamzen bitmap fonts (regular + bold at all sizes)
+#include "crispface_fonts/Tamzen13x1.h"
+#include "crispface_fonts/Tamzen13x1Bold.h"
+#include "crispface_fonts/Tamzen16x1.h"
+#include "crispface_fonts/Tamzen16x1Bold.h"
+#include "crispface_fonts/Tamzen26x2.h"
+#include "crispface_fonts/Tamzen26x2Bold.h"
+#include "crispface_fonts/Tamzen32x2.h"
+#include "crispface_fonts/Tamzen32x2Bold.h"
+#include "crispface_fonts/Tamzen60x3.h"
+#include "crispface_fonts/Tamzen60x3Bold.h"
+#include "crispface_fonts/Tamzen80x4.h"
+#include "crispface_fonts/Tamzen80x4Bold.h"
 
 #include <Fonts/FreeSerif9pt7b.h>
 #include <Fonts/FreeSerif12pt7b.h>
@@ -32,15 +41,11 @@
 // Custom 36pt + 48pt fonts generated via firmware/generate_fonts.sh
 #include "crispface_fonts/FreeSans36pt7b.h"
 #include "crispface_fonts/FreeSansBold36pt7b.h"
-#include "crispface_fonts/FreeMono36pt7b.h"
-#include "crispface_fonts/FreeMonoBold36pt7b.h"
 #include "crispface_fonts/FreeSerif36pt7b.h"
 #include "crispface_fonts/FreeSerifBold36pt7b.h"
 
 #include "crispface_fonts/FreeSans48pt7b.h"
 #include "crispface_fonts/FreeSansBold48pt7b.h"
-#include "crispface_fonts/FreeMono48pt7b.h"
-#include "crispface_fonts/FreeMonoBold48pt7b.h"
 #include "crispface_fonts/FreeSerif48pt7b.h"
 #include "crispface_fonts/FreeSerifBold48pt7b.h"
 
@@ -54,14 +59,25 @@ inline const GFXfont* getFont(const char* family, int size, bool bold) {
     bool serif = (family[0] == 's' && family[1] == 'e'); // "serif" vs "sans"
 
     if (mono) {
+        if (bold) {
+            switch (size) {
+                case 72: return &Tamzen80x4Bold;
+                case 60: return &Tamzen60x3Bold;
+                case 48: return &Tamzen32x2Bold;
+                case 24: return &Tamzen26x2Bold;
+                case 16: return &Tamzen16x1Bold;
+                case 12: return &Tamzen13x1Bold;
+                default: return &Tamzen13x1Bold;
+            }
+        }
         switch (size) {
-            case 72: return bold ? &FreeMonoBold48pt7b : &FreeMono48pt7b;
-            case 60: return bold ? &FreeMonoBold36pt7b : &FreeMono36pt7b;
-            case 48: return &FreeMono24pt7b;
-            case 24: return &FreeMono18pt7b;
-            case 16: return &FreeMono12pt7b;
-            case 12: return &FreeMono9pt7b;
-            default: return &FreeMono9pt7b;
+            case 72: return &Tamzen80x4;
+            case 60: return &Tamzen60x3;
+            case 48: return &Tamzen32x2;
+            case 24: return &Tamzen26x2;
+            case 16: return &Tamzen16x1;
+            case 12: return &Tamzen13x1;
+            default: return &Tamzen13x1;
         }
     }
 

@@ -8,7 +8,7 @@
     var FONT_FAMILIES = [
         { value: 'sans-serif', label: 'Sans' },
         { value: 'serif', label: 'Serif' },
-        { value: 'monospace', label: 'Mono' }
+        { value: 'monospace', label: 'Tamzen' }
     ];
 
     // Stored values map to Adafruit GFX pt sizes on the watch.
@@ -34,14 +34,14 @@
         'sans-serif|12|1': { th: 17, ascent: 12 }, 'sans-serif|16|1': { th: 23, ascent: 17 },
         'sans-serif|24|1': { th: 33, ascent: 25 }, 'sans-serif|48|1': { th: 45, ascent: 33 },
         'sans-serif|60|1': { th: 68, ascent: 51 }, 'sans-serif|72|1': { th: 89, ascent: 69 },
-        // monospace regular
-        'monospace|12|0': { th: 13, ascent: 9 },  'monospace|16|0': { th: 18, ascent: 13 },
-        'monospace|24|0': { th: 27, ascent: 19 },  'monospace|48|0': { th: 35, ascent: 25 },
-        'monospace|60|0': { th: 53, ascent: 39 },  'monospace|72|0': { th: 70, ascent: 53 },
-        // monospace bold
-        'monospace|12|1': { th: 15, ascent: 10 },  'monospace|16|1': { th: 19, ascent: 13 },
-        'monospace|24|1': { th: 28, ascent: 20 },  'monospace|48|1': { th: 36, ascent: 26 },
-        'monospace|60|1': { th: 55, ascent: 40 },  'monospace|72|1': { th: 74, ascent: 54 },
+        // monospace regular (Tamzen bitmap)
+        'monospace|12|0': { th: 13, ascent: 11 },  'monospace|16|0': { th: 16, ascent: 12 },
+        'monospace|24|0': { th: 26, ascent: 22 },  'monospace|48|0': { th: 32, ascent: 24 },
+        'monospace|60|0': { th: 60, ascent: 42 },  'monospace|72|0': { th: 80, ascent: 56 },
+        // monospace bold (Tamzen bitmap)
+        'monospace|12|1': { th: 13, ascent: 11 },  'monospace|16|1': { th: 16, ascent: 12 },
+        'monospace|24|1': { th: 26, ascent: 22 },  'monospace|48|1': { th: 32, ascent: 24 },
+        'monospace|60|1': { th: 60, ascent: 42 },  'monospace|72|1': { th: 80, ascent: 56 },
         // serif regular
         'serif|12|0': { th: 16, ascent: 11 },  'serif|16|0': { th: 21, ascent: 15 },
         'serif|24|0': { th: 31, ascent: 22 },  'serif|48|0': { th: 42, ascent: 31 },

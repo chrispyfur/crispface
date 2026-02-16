@@ -13,13 +13,13 @@
 }
 @font-face {
     font-family: 'CrispMono';
-    src: url('/crispface/firmware/tools/fonts/FreeMono.ttf') format('truetype');
+    src: url('/crispface/firmware/tools/fonts/tamzen/ttf/Tamzen8x16r.ttf') format('truetype');
     font-weight: normal;
     font-display: block;
 }
 @font-face {
     font-family: 'CrispMono';
-    src: url('/crispface/firmware/tools/fonts/FreeMonoBold.ttf') format('truetype');
+    src: url('/crispface/firmware/tools/fonts/tamzen/ttf/Tamzen8x16b.ttf') format('truetype');
     font-weight: bold;
     font-display: block;
 }
