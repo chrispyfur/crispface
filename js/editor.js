@@ -236,9 +236,10 @@
                     ctx.textBaseline = 'alphabetic';
 
                     // Measure ascent (matching firmware's getTextBounds("Ay"))
+                    // Floor ascent to integer — firmware uses integer ty from getTextBounds
                     var metrics = ctx.measureText('Ay');
-                    var ascent = metrics.actualBoundingBoxAscent;
-                    var descent = metrics.actualBoundingBoxDescent;
+                    var ascent = Math.floor(metrics.actualBoundingBoxAscent);
+                    var descent = Math.ceil(metrics.actualBoundingBoxDescent);
                     var lineH = ascent + descent + 2; // firmware: th + 2
 
                     // Clip to inner bounds
@@ -255,11 +256,22 @@
 
                     for (var li = 0; li < lines.length; li++) {
                         if (curY - ascent >= iy + ih) break;
-                        var lineW = ctx.measureText(lines[li]).width;
+                        // Measure actual pixel extent of this line
+                        // (firmware uses getTextBounds tw, not advance width)
+                        var lm = ctx.measureText(lines[li]);
+                        var lmLeft = lm.actualBoundingBoxLeft || 0;
+                        var lmRight = lm.actualBoundingBoxRight || 0;
+                        var actualW = lmLeft + lmRight;
                         var curX;
-                        if (align === 'center') curX = ix + (iw - lineW) / 2;
-                        else if (align === 'right') curX = ix + iw - lineW;
-                        else curX = ix;
+                        if (align === 'center') {
+                            // Center actual pixels in bounds
+                            curX = ix + Math.round((iw - actualW) / 2) + lmLeft;
+                        } else if (align === 'right') {
+                            curX = ix + iw - Math.ceil(actualW) + lmLeft;
+                        } else {
+                            // Left: offset so leftmost pixel is flush with ix
+                            curX = ix + lmLeft;
+                        }
                         ctx.fillText(lines[li], curX, curY);
                         curY += lineH;
                     }
