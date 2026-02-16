@@ -18,12 +18,13 @@
         { value: 16, label: 'Medium (12pt)' },
         { value: 24, label: 'Large (18pt)' },
         { value: 48, label: 'X-Large (24pt)' },
+        { value: 60, label: 'XXL (36pt)' },
         { value: 72, label: 'Huge (48pt)' }
     ];
 
     // Map stored editor px → GFX getTextBounds("Ay") height for FreeSans at that pt size.
     // Ensures editor text fills the same vertical space as on the watch.
-    var DISPLAY_SIZE_MAP = { 8: 17, 12: 17, 16: 23, 24: 34, 48: 44, 72: 89 };
+    var DISPLAY_SIZE_MAP = { 8: 17, 12: 17, 16: 23, 24: 34, 48: 44, 60: 67, 72: 89 };
 
     var ALIGNS = ['left', 'center', 'right'];
 

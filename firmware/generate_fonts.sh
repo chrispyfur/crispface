@@ -1,14 +1,14 @@
 #!/bin/bash
-# Generate 48pt Adafruit GFX font headers from FreeFont TTFs.
+# Generate 36pt and 48pt Adafruit GFX font headers from FreeFont TTFs.
 # Requires: libfreetype-dev, pkg-config, gcc
-# The Adafruit GFX library bundles 9/12/18/24pt — only 48pt needs generating.
+# The Adafruit GFX library bundles 9/12/18/24pt — 36pt and 48pt need generating.
 set -e
 cd "$(dirname "$0")"
 
 FONT_DIR="tools/fonts"
 OUT_DIR="include/crispface_fonts"
 FONTCONVERT="tools/bin/fontconvert"
-SIZE=48
+SIZES=(36 48)
 FIRST_CHAR=32
 LAST_CHAR=126
 
@@ -40,29 +40,25 @@ fi
 
 mkdir -p "$OUT_DIR"
 
-# Generate 48pt fonts for all families
-declare -A FONTS=(
-    ["FreeSans"]="FreeSans48pt7b"
-    ["FreeSansBold"]="FreeSansBold48pt7b"
-    ["FreeMono"]="FreeMono48pt7b"
-    ["FreeMonoBold"]="FreeMonoBold48pt7b"
-    ["FreeSerif"]="FreeSerif48pt7b"
-    ["FreeSerifBold"]="FreeSerifBold48pt7b"
-)
+# Font families to generate
+TTF_NAMES=(FreeSans FreeSansBold FreeMono FreeMonoBold FreeSerif FreeSerifBold)
 
-for ttf_name in "${!FONTS[@]}"; do
-    header_name="${FONTS[$ttf_name]}"
-    ttf_path="$FONT_DIR/${ttf_name}.ttf"
-    out_path="$OUT_DIR/${header_name}.h"
+for SIZE in "${SIZES[@]}"; do
+    echo "=== Generating ${SIZE}pt fonts ==="
+    for ttf_name in "${TTF_NAMES[@]}"; do
+        header_name="${ttf_name}${SIZE}pt7b"
+        ttf_path="$FONT_DIR/${ttf_name}.ttf"
+        out_path="$OUT_DIR/${header_name}.h"
 
-    if [ ! -f "$ttf_path" ]; then
-        echo "Warning: $ttf_path not found, skipping."
-        continue
-    fi
+        if [ ! -f "$ttf_path" ]; then
+            echo "Warning: $ttf_path not found, skipping."
+            continue
+        fi
 
-    echo "Generating ${header_name}..."
-    "$FONTCONVERT" "$ttf_path" "$SIZE" "$FIRST_CHAR" "$LAST_CHAR" > "$out_path"
-    echo "  -> $out_path"
+        echo "Generating ${header_name}..."
+        "$FONTCONVERT" "$ttf_path" "$SIZE" "$FIRST_CHAR" "$LAST_CHAR" > "$out_path"
+        echo "  -> $out_path"
+    done
 done
 
 echo "Done. Generated $(ls "$OUT_DIR"/*.h 2>/dev/null | wc -l) font headers."
