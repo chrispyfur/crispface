@@ -116,9 +116,6 @@
                 var inset = getInset(obj.crispfaceData);
                 var pTop = obj.crispfaceData.padding_top || 0;
                 obj.crispfaceData.h = h + inset * 2 + pTop; // store outer height
-                if (obj.clipPath) {
-                    obj.clipPath.set({ width: w, height: h });
-                }
             }
             enforceBounds(obj);
         });
@@ -183,16 +180,16 @@
                     ctx.restore();
                 }
 
+                // Inner bounds for custom rendering
+                var ix = Math.round(obj.left);
+                var iy = Math.round(obj.top);
+                var iw = Math.round(obj.width * (obj.scaleX || 1));
+                var ih = Math.round(obj.height * (obj.scaleY || 1));
+                var bg = CF.faceData.background === 'black' ? '#000000' : '#ffffff';
+
                 // Draw battery icon (replaces text for icon mode)
                 var cType = d.complication_type || d.complication_id || '';
                 if (cType === 'battery' && (d.params || {}).display !== 'percentage' && (d.params || {}).display !== 'voltage') {
-                    var ix = Math.round(obj.left);
-                    var iy = Math.round(obj.top);
-                    var iw = Math.round(obj.width * (obj.scaleX || 1));
-                    var ih = Math.round(obj.height * (obj.scaleY || 1));
-
-                    // Clear text area and fill with background
-                    var bg = CF.faceData.background === 'black' ? '#000000' : '#ffffff';
                     ctx.save();
                     ctx.fillStyle = bg;
                     ctx.fillRect(ix, iy, iw, ih);
@@ -222,6 +219,50 @@
                         ctx.fillRect(ix + pad, iy + pad, fillW, ih - pad * 2);
                     }
 
+                    ctx.restore();
+                } else if (d.type === 'text' && d.content) {
+                    // Draw text matching firmware's drawAligned() algorithm
+                    var content = d.content;
+                    var displaySize = DISPLAY_SIZE_MAP[content.size] || content.size;
+                    var weight = content.bold ? 'bold ' : '';
+
+                    // Fill inner area with background (occludes overlapping complications)
+                    ctx.fillStyle = bg;
+                    ctx.fillRect(ix, iy, iw, ih);
+
+                    // Set font matching firmware
+                    ctx.font = weight + displaySize + 'px ' + content.family;
+                    ctx.fillStyle = col;
+                    ctx.textBaseline = 'alphabetic';
+
+                    // Measure ascent (matching firmware's getTextBounds("Ay"))
+                    var metrics = ctx.measureText('Ay');
+                    var ascent = metrics.actualBoundingBoxAscent;
+                    var descent = metrics.actualBoundingBoxDescent;
+                    var lineH = ascent + descent + 2; // firmware: th + 2
+
+                    // Clip to inner bounds
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(ix, iy, iw, ih);
+                    ctx.clip();
+
+                    // Split on newlines (firmware doesn't word-wrap)
+                    var text = String(content.value || '');
+                    var lines = text.split('\n');
+                    var curY = iy + ascent; // firmware: curY = by + ascent
+                    var align = content.align || 'left';
+
+                    for (var li = 0; li < lines.length; li++) {
+                        if (curY - ascent >= iy + ih) break;
+                        var lineW = ctx.measureText(lines[li]).width;
+                        var curX;
+                        if (align === 'center') curX = ix + (iw - lineW) / 2;
+                        else if (align === 'right') curX = ix + iw - lineW;
+                        else curX = ix;
+                        ctx.fillText(lines[li], curX, curY);
+                        curY += lineH;
+                    }
                     ctx.restore();
                 }
             });
@@ -273,15 +314,7 @@
     function createTextComplication(data) {
         var content = migrateContent(data.content || {});
         var currentBg = CF.faceData.background;
-        // Always contrast with background
-        var fgHex = currentBg === 'black' ? '#ffffff' : '#000000';
         var fgName = currentBg === 'black' ? 'white' : 'black';
-
-        var fontWeight = content.bold ? 'bold' : 'normal';
-        var fontStyle = content.italic ? 'italic' : 'normal';
-
-        var storedSize = content.size || 12;
-        var displaySize = DISPLAY_SIZE_MAP[storedSize] || storedSize;
 
         var compH = data.h || 40;
         var inset = (data.border_width || 0) > 0 ? (data.border_width || 0) + (data.border_padding || 0) : 0;
@@ -290,20 +323,13 @@
         var innerW = Math.max((data.w || 80) - inset * 2 - padLeft, 1);
         var innerH = Math.max(compH - inset * 2 - padTop, 1);
 
-        var text = new fabric.Textbox(content.value || 'Text', {
+        var rect = new fabric.Rect({
             left: (data.x || 10) + inset + padLeft,
             top: (data.y || 10) + inset + padTop,
             width: innerW,
             height: innerH,
-            fontSize: displaySize,
-            lineHeight: 1,
-            fontFamily: content.family || 'sans-serif',
-            fontWeight: fontWeight,
-            fontStyle: fontStyle,
-            fill: fgHex,
-            textAlign: content.align || 'left',
-            splitByGrapheme: true,
-            editable: false,
+            fill: 'transparent',
+            stroke: 'transparent',
             lockRotation: true,
             hasRotatingPoint: false,
             cornerStyle: 'rect',
@@ -314,7 +340,7 @@
             borderScaleFactor: 1
         });
 
-        text.crispfaceData = {
+        rect.crispfaceData = {
             complication_id: data.complication_id || ('comp_' + nextCompId++),
             complication_type: data.complication_type || '',
             type: 'text',
@@ -339,37 +365,11 @@
             }
         };
 
-        // Clip text rendering to inner bounds (prevents overflow past padding)
-        text.clipPath = new fabric.Rect({
-            width: innerW,
-            height: innerH,
-            originX: 'center',
-            originY: 'center'
-        });
-
-        // Override initDimensions so Fabric.js doesn't auto-recalculate height
-        var origInitDimensions = text.initDimensions.bind(text);
-        text.initDimensions = function () {
-            origInitDimensions();
-            var ins = getInset(this.crispfaceData);
-            var pTop = this.crispfaceData.padding_top || 0;
-            this.height = Math.max(this.crispfaceData.h - ins * 2 - pTop, 1);
-            // Keep clipPath in sync with inner dimensions
-            if (this.clipPath) {
-                this.clipPath.set({
-                    width: Math.max(this.width, 1),
-                    height: this.height
-                });
-            }
-        };
-        text.height = innerH;
-        text.setCoords();
-
-        canvas.add(text);
-        canvas.setActiveObject(text);
+        canvas.add(rect);
+        canvas.setActiveObject(rect);
         canvas.requestRenderAll();
 
-        return text;
+        return rect;
     }
 
     // Load face data onto canvas
@@ -562,7 +562,6 @@
     // Background color sync — also invert all complication text colors
     function syncBackground() {
         var bg = document.getElementById('face-background').value;
-        var fgHex = bg === 'white' ? '#000000' : '#ffffff';
         var fgName = bg === 'white' ? 'black' : 'white';
 
         canvas.backgroundColor = bg === 'white' ? '#ffffff' : '#000000';
@@ -572,7 +571,6 @@
             var obj = objects[i];
             if (obj.crispfaceData && obj.crispfaceData.type === 'text') {
                 obj.crispfaceData.content.color = fgName;
-                obj.set({ fill: fgHex });
                 obj.dirty = true;
             }
         }
@@ -621,7 +619,6 @@
             fetch(url).then(function (r) { return r.json(); }).then(function (data) {
                 if (data.value !== undefined) {
                     obj.crispfaceData.content.value = String(data.value);
-                    obj.set({ text: String(data.value) });
                     obj.dirty = true;
                     canvas.renderAll();
                 }
