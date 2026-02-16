@@ -506,6 +506,8 @@
             var name = cType || c.complication_id || 'comp ' + (i + 1);
             if (isLocal) {
                 items.push({ name: name, freq: 'local' });
+            } else if (!c.content || !c.content.source) {
+                items.push({ name: name, freq: 'static' });
             } else {
                 var stale = c.stale_enabled !== false ? (c.stale_seconds || 60) : -1;
                 items.push({ name: name, freq: stale > 0 ? formatInterval(stale) : 'never' });
