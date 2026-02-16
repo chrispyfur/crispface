@@ -736,14 +736,7 @@ body.simulating .canvas-container-wrapper {
     color: #888;
 }
 
-/* Toolbar label + select */
-.toolbar-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--gray-medium);
-    line-height: 30px;
-}
-
+/* Toolbar select */
 .toolbar-select {
     padding: 4px 8px;
     border: 1px solid var(--gray-light);
