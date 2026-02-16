@@ -167,9 +167,10 @@ for face_id in face_ids:
         effective_type = comp_type if comp_type else (comp_id if is_local else '')
 
         # refresh_interval is in minutes; firmware needs seconds
-        # Only sourced complications need refresh; static/local get -1
+        # Only dynamic sourced complications need refresh; static text/local get -1
         has_source = bool(comp.get('content', {}).get('source'))
-        refresh_mins = comp.get('refresh_interval', 30) if has_source else -1
+        is_static = comp_type == 'text' or not has_source
+        refresh_mins = comp.get('refresh_interval', 30) if not is_static else -1
         stale_val = refresh_mins * 60 if refresh_mins > 0 else -1
 
         rc = {

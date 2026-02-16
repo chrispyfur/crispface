@@ -504,7 +504,7 @@
             var name = cType || c.complication_id || 'comp ' + (i + 1);
             if (isLocal) {
                 items.push({ name: name, freq: 'local' });
-            } else if (!c.content || !c.content.source) {
+            } else if (!c.content || !c.content.source || cType === 'text') {
                 items.push({ name: name, freq: 'static' });
             } else {
                 items.push({ name: name, freq: formatInterval(c.refresh_interval || 30) });
