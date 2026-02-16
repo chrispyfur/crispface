@@ -741,7 +741,7 @@ body.simulating .canvas-container-wrapper {
 
 /* Complication edit page */
 .comp-edit-form {
-    max-width: 640px;
+    max-width: 800px;
 }
 
 .comp-variables-section,
@@ -804,8 +804,17 @@ body.simulating .canvas-container-wrapper {
     border-color: var(--blue);
 }
 
+.var-table .col-name,
+.var-table .col-default {
+    width: 100px;
+}
+
 .var-table .col-type {
     width: 80px;
+}
+
+.var-table .col-options {
+    width: 180px;
 }
 
 .var-table .col-remove {

@@ -454,8 +454,8 @@
             table.className = 'var-table';
             table.innerHTML =
                 '<thead><tr>' +
-                '<th>Name</th><th>Label</th><th class="col-type">Type</th>' +
-                '<th>Default</th><th>Options</th><th class="col-remove"></th>' +
+                '<th class="col-name">Name</th><th>Label</th><th class="col-type">Type</th>' +
+                '<th class="col-default">Default</th><th class="col-options">Options</th><th class="col-remove"></th>' +
                 '</tr></thead><tbody></tbody>';
             list.appendChild(table);
             for (var i = 0; i < variables.length; i++) {
@@ -479,8 +479,8 @@
             table.className = 'var-table';
             table.innerHTML =
                 '<thead><tr>' +
-                '<th>Name</th><th>Label</th><th class="col-type">Type</th>' +
-                '<th>Default</th><th>Options</th><th class="col-remove"></th>' +
+                '<th class="col-name">Name</th><th>Label</th><th class="col-type">Type</th>' +
+                '<th class="col-default">Default</th><th class="col-options">Options</th><th class="col-remove"></th>' +
                 '</tr></thead><tbody></tbody>';
             list.appendChild(table);
         }
