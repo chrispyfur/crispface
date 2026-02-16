@@ -429,8 +429,7 @@
             complication_type: data.complication_type || '',
             type: 'text',
             h: compH,
-            stale_seconds: (data.params && data.params.refresh) ? parseInt(data.params.refresh, 10) || 1 : (data.stale_seconds || 1),
-            stale_enabled: data.stale_enabled !== false,
+            refresh_interval: data.refresh_interval || (data.params && data.params.refresh ? parseInt(data.params.refresh, 10) : 30),
             source: content.source || '',
             params: data.params || {},
             border_width: data.border_width || 0,
@@ -508,8 +507,7 @@
             } else if (!c.content || !c.content.source) {
                 items.push({ name: name, freq: 'static' });
             } else {
-                var stale = c.stale_enabled !== false ? (c.stale_seconds || 1) : -1;
-                items.push({ name: name, freq: stale > 0 ? formatInterval(stale) : 'never' });
+                items.push({ name: name, freq: formatInterval(c.refresh_interval || 30) });
             }
         }
 
@@ -596,8 +594,7 @@
                 y: Math.round(obj.top) - inset - padTop,
                 w: Math.round(obj.width * (obj.scaleX || 1)) + inset * 2 + padLeft,
                 h: d.h,
-                stale_seconds: d.stale_seconds,
-                stale_enabled: d.stale_enabled !== false,
+                refresh_interval: d.refresh_interval || 30,
                 border_width: d.border_width || 0,
                 border_radius: d.border_radius || 0,
                 border_padding: d.border_padding || 0,
@@ -698,7 +695,7 @@
             }
             url += (url.indexOf('?') >= 0 ? '&' : '?') + qs.join('&');
         }
-        var interval = (obj.crispfaceData.stale_seconds || 1) * 60000;
+        var interval = (obj.crispfaceData.refresh_interval || 30) * 60000;
 
         function poll() {
             fetch(url).then(function (r) { return r.json(); }).then(function (data) {

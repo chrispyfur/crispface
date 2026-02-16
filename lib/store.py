@@ -70,7 +70,6 @@ def create_face(name, user):
         'slug': _slugify(name),
         'name': name,
         'background': 'black',
-        'stale_seconds': 1,
         'controls': [],
         'complications': [],
         'sort_order': max_order + 1,
@@ -94,11 +93,6 @@ def save_face(face_id, data, user):
         existing['slug'] = re.sub(r'[^a-z0-9-]', '', str(data['slug']).lower())[:50] or existing['slug']
     if 'background' in data and data['background'] in ('black', 'white'):
         existing['background'] = data['background']
-    if 'stale_seconds' in data:
-        existing['stale_seconds'] = max(1, int(data.get('stale_seconds', 1)))
-    if 'stale_enabled' in data:
-        existing['stale_enabled'] = bool(data['stale_enabled'])
-
     if 'complications' in data:
         validated = []
         for c in data['complications']:
@@ -159,8 +153,7 @@ def _validate_complication(c):
         'y': int(c.get('y', 0)),
         'w': int(c.get('w', 80)),
         'h': int(c.get('h', 40)),
-        'stale_seconds': max(1, int(c.get('stale_seconds', 1))),
-        'stale_enabled': bool(c.get('stale_enabled', True)),
+        'refresh_interval': max(1, int(c.get('refresh_interval', 30))),
         'border_width': max(0, min(5, int(c.get('border_width', 0)))),
         'border_radius': max(0, min(20, int(c.get('border_radius', 0)))),
         'border_padding': max(0, min(20, int(c.get('border_padding', 0)))),

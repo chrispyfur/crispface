@@ -166,9 +166,11 @@ for face_id in face_ids:
         # Use complication_id as type if complication_type is empty and it's local
         effective_type = comp_type if comp_type else (comp_id if is_local else '')
 
-        # stale_seconds is stored in minutes; firmware needs seconds
-        stale_mins = comp.get('stale_seconds', 1) if comp.get('stale_enabled', True) else -1
-        stale_val = stale_mins * 60 if stale_mins > 0 else stale_mins
+        # refresh_interval is in minutes; firmware needs seconds
+        # Only sourced complications need refresh; static/local get -1
+        has_source = bool(comp.get('content', {}).get('source'))
+        refresh_mins = comp.get('refresh_interval', 30) if has_source else -1
+        stale_val = refresh_mins * 60 if refresh_mins > 0 else -1
 
         rc = {
             'id': comp.get('complication_id', ''),
