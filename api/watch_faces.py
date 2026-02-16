@@ -166,7 +166,9 @@ for face_id in face_ids:
         # Use complication_id as type if complication_type is empty and it's local
         effective_type = comp_type if comp_type else (comp_id if is_local else '')
 
-        stale_val = comp.get('stale_seconds', 60) if comp.get('stale_enabled', True) else -1
+        # stale_seconds is stored in minutes; firmware needs seconds
+        stale_mins = comp.get('stale_seconds', 1) if comp.get('stale_enabled', True) else -1
+        stale_val = stale_mins * 60 if stale_mins > 0 else stale_mins
 
         rc = {
             'id': comp.get('complication_id', ''),
@@ -203,7 +205,7 @@ for face_id in face_ids:
         'id': face.get('id', ''),
         'name': face.get('name', ''),
         'bg': face.get('background', 'white'),
-        'stale': 60,
+        'stale': 60,  # face-level stale in seconds (1 min)
         'complications': resolved_complications,
     })
 

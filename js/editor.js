@@ -429,7 +429,7 @@
             complication_type: data.complication_type || '',
             type: 'text',
             h: compH,
-            stale_seconds: data.stale_seconds || 60,
+            stale_seconds: data.stale_seconds || 1,
             stale_enabled: data.stale_enabled !== false,
             source: content.source || '',
             params: data.params || {},
@@ -482,13 +482,12 @@
         updateRefreshList(face);
     }
 
-    // Format seconds into human-readable interval
-    function formatInterval(seconds) {
-        if (seconds <= 0) return 'never';
-        if (seconds < 60) return seconds + 's';
-        if (seconds < 3600) return Math.round(seconds / 60) + 'min';
-        if (seconds < 86400) return Math.round(seconds / 3600) + 'hr';
-        return Math.round(seconds / 86400) + 'd';
+    // Format minutes into human-readable interval
+    function formatInterval(mins) {
+        if (mins <= 0) return 'never';
+        if (mins < 60) return mins + 'min';
+        if (mins < 1440) return Math.round(mins / 60) + 'hr';
+        return Math.round(mins / 1440) + 'd';
     }
 
     // Show each complication's refresh interval in the sidebar
@@ -509,7 +508,7 @@
             } else if (!c.content || !c.content.source) {
                 items.push({ name: name, freq: 'static' });
             } else {
-                var stale = c.stale_enabled !== false ? (c.stale_seconds || 60) : -1;
+                var stale = c.stale_enabled !== false ? (c.stale_seconds || 1) : -1;
                 items.push({ name: name, freq: stale > 0 ? formatInterval(stale) : 'never' });
             }
         }
@@ -699,7 +698,7 @@
             }
             url += (url.indexOf('?') >= 0 ? '&' : '?') + qs.join('&');
         }
-        var interval = (obj.crispfaceData.stale_seconds || 60) * 1000;
+        var interval = (obj.crispfaceData.stale_seconds || 1) * 60000;
 
         function poll() {
             fetch(url).then(function (r) { return r.json(); }).then(function (data) {

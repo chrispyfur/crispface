@@ -221,8 +221,8 @@
                     html += '<div class="prop-row"><label for="prop-stale-enabled">Needs refresh</label>';
                     html += '<input type="checkbox" id="prop-stale-enabled"' + (staleEnabled ? ' checked' : '') + ' /></div>';
 
-                    html += '<div class="prop-row" id="prop-stale-row"' + (staleEnabled ? '' : ' style="display:none"') + '><label for="prop-stale">Refresh after</label>';
-                    html += '<input type="number" id="prop-stale" value="' + (d.stale_seconds || 60) + '" min="1" /></div>';
+                    html += '<div class="prop-row" id="prop-stale-row"' + (staleEnabled ? '' : ' style="display:none"') + '><label for="prop-stale">Refresh (mins)</label>';
+                    html += '<input type="number" id="prop-stale" value="' + (d.stale_seconds || 1) + '" min="1" /></div>';
                 }
             }
 
@@ -560,7 +560,7 @@
         // Stale (only bound if element exists — not present for local)
         bindInput('prop-stale', function (val) {
             if (currentObject.crispfaceData) {
-                currentObject.crispfaceData.stale_seconds = parseInt(val, 10) || 60;
+                currentObject.crispfaceData.stale_seconds = parseInt(val, 10) || 1;
             }
         });
     }
