@@ -4,8 +4,13 @@
     "description": "Current weather conditions using Open-Meteo (free, no API key).",
     "script": "weather.py",
     "variables": [
-        {"name": "city", "label": "City", "default": "derby"}
+        {
+            "name": "city",
+            "label": "City",
+            "type": "text",
+            "default": "derby"
+        }
     ],
     "created_at": "2026-02-12T00:00:00+00:00",
-    "updated_at": "2026-02-12T00:00:00+00:00"
+    "updated_at": "2026-02-16T20:55:56.800761+00:00"
 }

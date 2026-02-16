@@ -34,6 +34,8 @@ RTC_DATA_ATTR char    cfNotifText[60]  = "";
 
 class CrispFace : public Watchy {
 public:
+    String cfDebugWifi; // WiFi debug log, populated by cfConnectWiFi()
+
     CrispFace(const watchySettings &s) : Watchy(s) {}
 
     void drawWatchFace() {
@@ -285,25 +287,46 @@ private:
 #endif
         };
         const int netCount = CRISPFACE_WIFI_COUNT;
+        cfDebugWifi = "";
+
+        if (CRISPFACE_DEBUG) {
+            cfDebugWifi += "WiFi: ";
+            cfDebugWifi += String(netCount);
+            cfDebugWifi += " known\n";
+        }
 
         WiFi.disconnect(true);
         delay(100);
         WiFi.mode(WIFI_STA);
 
         if (netCount == 0) {
+            if (CRISPFACE_DEBUG) cfDebugWifi += "No networks!\n";
             WiFi.mode(WIFI_OFF);
             return false;
         }
 
         if (netCount == 1) {
             // Single network — connect directly without scanning
+            if (CRISPFACE_DEBUG) {
+                cfDebugWifi += "Try: ";
+                cfDebugWifi += knownSSIDs[0];
+                cfDebugWifi += "\n";
+            }
             WiFi.begin(knownSSIDs[0], knownPasses[0]);
             int attempts = 0;
             while (WiFi.status() != WL_CONNECTED && attempts < 40) {
                 delay(500);
                 attempts++;
             }
-            if (WiFi.status() == WL_CONNECTED) return true;
+            if (WiFi.status() == WL_CONNECTED) {
+                if (CRISPFACE_DEBUG) cfDebugWifi += "Connected OK\n";
+                return true;
+            }
+            if (CRISPFACE_DEBUG) {
+                cfDebugWifi += "FAIL after ";
+                cfDebugWifi += String(attempts);
+                cfDebugWifi += " tries\n";
+            }
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
             return false;
@@ -311,6 +334,11 @@ private:
 
         // Multiple networks — scan and connect to strongest known one
         int found = WiFi.scanNetworks();
+        if (CRISPFACE_DEBUG) {
+            cfDebugWifi += "Scan: ";
+            cfDebugWifi += String(found);
+            cfDebugWifi += " found\n";
+        }
         if (found <= 0) {
             WiFi.scanDelete();
             WiFi.disconnect(true);
@@ -322,8 +350,20 @@ private:
         // Iterate scan results and try connecting to first known match.
         for (int i = 0; i < found; i++) {
             String scannedSSID = WiFi.SSID(i);
+            if (CRISPFACE_DEBUG && i < 5) {
+                cfDebugWifi += " ";
+                cfDebugWifi += scannedSSID;
+                cfDebugWifi += " (";
+                cfDebugWifi += String(WiFi.RSSI(i));
+                cfDebugWifi += ")\n";
+            }
             for (int k = 0; k < netCount; k++) {
                 if (scannedSSID == knownSSIDs[k]) {
+                    if (CRISPFACE_DEBUG) {
+                        cfDebugWifi += "Try: ";
+                        cfDebugWifi += knownSSIDs[k];
+                        cfDebugWifi += "\n";
+                    }
                     WiFi.begin(knownSSIDs[k], knownPasses[k]);
                     int attempts = 0;
                     while (WiFi.status() != WL_CONNECTED && attempts < 40) {
@@ -331,8 +371,14 @@ private:
                         attempts++;
                     }
                     if (WiFi.status() == WL_CONNECTED) {
+                        if (CRISPFACE_DEBUG) cfDebugWifi += "Connected OK\n";
                         WiFi.scanDelete();
                         return true;
+                    }
+                    if (CRISPFACE_DEBUG) {
+                        cfDebugWifi += "FAIL after ";
+                        cfDebugWifi += String(attempts);
+                        cfDebugWifi += " tries\n";
                     }
                     // Connection failed — try next scanned network
                     WiFi.disconnect(true);
@@ -366,11 +412,26 @@ private:
     }
 
     void syncFromServer() {
+        String dbg; // debug log, displayed if CRISPFACE_DEBUG
         syncProgress(5);
 
         if (!cfConnectWiFi()) {
+            if (CRISPFACE_DEBUG) {
+                dbg += cfDebugWifi;
+                dbg += "RESULT: WiFi FAILED\n";
+                renderDebug(dbg);
+            }
             syncProgress(0);
             return;
+        }
+
+        if (CRISPFACE_DEBUG) {
+            dbg += cfDebugWifi;
+            dbg += "IP: ";
+            dbg += WiFi.localIP().toString();
+            dbg += "\nRSSI: ";
+            dbg += String(WiFi.RSSI());
+            dbg += "dBm\n";
         }
 
         // Start NTP in background (non-blocking) — runs while HTTP proceeds
@@ -386,6 +447,12 @@ private:
         snprintf(url, sizeof(url), "%s%s?watch_id=%s",
                  CRISPFACE_SERVER, CRISPFACE_API_PATH, CRISPFACE_WATCH_ID);
 
+        if (CRISPFACE_DEBUG) {
+            dbg += "URL: ";
+            dbg += url;
+            dbg += "\n";
+        }
+
         http.begin(client, url);
         char authHeader[80];
         snprintf(authHeader, sizeof(authHeader), "Bearer %s", CRISPFACE_API_TOKEN);
@@ -398,9 +465,15 @@ private:
         int httpCode = http.GET();
         if (httpCode != 200) {
             http.end();
-            cfSyncNTP(); // still sync time even if face fetch failed
+            cfSyncNTP();
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
+            if (CRISPFACE_DEBUG) {
+                dbg += "HTTP: ";
+                dbg += String(httpCode);
+                dbg += " FAILED\n";
+                renderDebug(dbg);
+            }
             syncProgress(0);
             return;
         }
@@ -419,9 +492,24 @@ private:
         {
             DynamicJsonDocument doc(16384);
             DeserializationError err = deserializeJson(doc, payload);
+            int payloadLen = payload.length();
             payload = "";
 
             if (err || !doc["success"].as<bool>()) {
+                if (CRISPFACE_DEBUG) {
+                    dbg += "HTTP: 200 OK\n";
+                    dbg += "Body: ";
+                    dbg += String(payloadLen);
+                    dbg += " bytes\n";
+                    if (err) {
+                        dbg += "JSON: ";
+                        dbg += err.c_str();
+                        dbg += "\n";
+                    } else {
+                        dbg += "API: success=false\n";
+                    }
+                    renderDebug(dbg);
+                }
                 syncProgress(0);
                 return;
             }
@@ -429,6 +517,11 @@ private:
             JsonArray faces = doc["faces"].as<JsonArray>();
             int total = faces.size();
             if (total == 0) {
+                if (CRISPFACE_DEBUG) {
+                    dbg += "HTTP: 200 OK\n";
+                    dbg += "Faces: 0 (empty)\n";
+                    renderDebug(dbg);
+                }
                 syncProgress(0);
                 return;
             }
@@ -525,7 +618,49 @@ private:
             }
         }
 
+        if (CRISPFACE_DEBUG) {
+            dbg += "HTTP: 200 OK\n";
+            dbg += "Faces: ";
+            dbg += String(cfFaceCount);
+            dbg += "\nInterval: ";
+            dbg += String(cfSyncInterval);
+            dbg += "s\n";
+            renderDebug(dbg);
+        }
+
         syncProgress(100);
+    }
+
+    // ---- Debug display ----
+
+    void renderDebug(String &info) {
+        display.setFullWindow();
+        display.fillScreen(GxEPD_WHITE);
+        display.setTextColor(GxEPD_BLACK);
+        display.setFont(NULL); // built-in 6x8 font
+        display.setCursor(0, 0);
+
+        // Print line by line (built-in font is 8px tall)
+        int y = 4;
+        int idx = 0;
+        while (idx < (int)info.length() && y < 196) {
+            int nl = info.indexOf('\n', idx);
+            String line = (nl < 0) ? info.substring(idx) : info.substring(idx, nl);
+            idx = (nl < 0) ? info.length() : nl + 1;
+
+            // Truncate long lines to fit 200px (33 chars at 6px)
+            if (line.length() > 33) line = line.substring(0, 33);
+
+            display.setCursor(2, y);
+            display.print(line);
+            y += 10;
+        }
+
+        // Show version at bottom
+        display.setCursor(2, 190);
+        display.print("CrispFace v" CRISPFACE_VERSION " DBG");
+
+        display.display(true); // partial refresh
     }
 
     // ---- Render face from SPIFFS ----
