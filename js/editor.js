@@ -285,6 +285,7 @@
             width: innerW,
             height: innerH,
             fontSize: displaySize,
+            lineHeight: 1,
             fontFamily: content.family || 'sans-serif',
             fontWeight: fontWeight,
             fontStyle: fontStyle,
