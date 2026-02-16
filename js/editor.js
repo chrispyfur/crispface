@@ -398,12 +398,21 @@
 
                     ctx.restore();
                 } else if (d.type === 'text' && d.content && String(d.content.value || '').indexOf('icon:') === 0) {
-                    // Weather icon preview
-                    var weatherCode = parseInt(String(d.content.value).substring(5), 10) || 0;
+                    // Weather icon preview — value is "icon:CODE" or "icon:CODE:SIZE"
+                    var iconParts = String(d.content.value).substring(5).split(':');
+                    var weatherCode = parseInt(iconParts[0], 10) || 0;
+                    var iconSize = iconParts.length > 1 ? parseInt(iconParts[1], 10) : 0;
                     ctx.save();
                     ctx.fillStyle = bg;
                     ctx.fillRect(ix, iy, iw, ih);
-                    drawWeatherIconPreview(ctx, weatherCode, ix, iy, iw, ih, col);
+                    if (iconSize > 0 && iconSize < iw && iconSize < ih) {
+                        // Center the icon at the requested pixel size
+                        var ox = ix + Math.round((iw - iconSize) / 2);
+                        var oy = iy + Math.round((ih - iconSize) / 2);
+                        drawWeatherIconPreview(ctx, weatherCode, ox, oy, iconSize, iconSize, col);
+                    } else {
+                        drawWeatherIconPreview(ctx, weatherCode, ix, iy, iw, ih, col);
+                    }
                     ctx.restore();
                 } else if (d.type === 'text' && d.content) {
                     // Draw text matching firmware's drawAligned() algorithm

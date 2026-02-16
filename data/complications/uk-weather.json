@@ -8,6 +8,8 @@
         {"name": "town", "label": "Town", "default": "Derby"},
         {"name": "display", "label": "Display", "type": "select",
          "options": "summary,temp,feels,conditions,wind,humidity,uv,precip,detail,icon,rainstop"},
+        {"name": "iconsize", "label": "Icon Size (px)", "type": "select",
+         "options": "16,24,32,48,64,96", "default": "48"},
         {"name": "refresh", "label": "Refresh (mins)", "type": "select",
          "options": "15,30,60,120,360", "default": "30"}
     ],

@@ -98,7 +98,7 @@ def format_rainstop(current, series):
 
     return 'Rain 12h+'
 
-def format_value(display, data):
+def format_value(display, data, iconsize=48):
     current = data.get('current', data)
     series = data.get('series', [])
 
@@ -132,7 +132,7 @@ def format_value(display, data):
         return '{:.0f}\u00b0 {}\nWind {}mph\nRain {:.0f}%'.format(
             temp, conditions, wind_mph, precip)
     elif display == 'icon':
-        return 'icon:{}'.format(code)
+        return 'icon:{}:{}'.format(code, iconsize)
     elif display == 'rainstop':
         return format_rainstop(current, series)
     else:  # summary
@@ -144,6 +144,10 @@ qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
 apikey = qs.get('apikey', [''])[0].strip()
 town_name = qs.get('town', ['Derby'])[0].strip()
 display = qs.get('display', ['summary'])[0].strip()
+try:
+    iconsize = int(qs.get('iconsize', ['48'])[0])
+except ValueError:
+    iconsize = 48
 try:
     refresh_mins = int(qs.get('refresh', ['30'])[0])
 except ValueError:
@@ -274,7 +278,7 @@ else:
             sys.exit(0)
 
 if weather_data:
-    value = format_value(display, weather_data)
+    value = format_value(display, weather_data, iconsize)
 else:
     value = 'Weather unavailable'
 

@@ -763,10 +763,20 @@ private:
             val = batVal.c_str();
         }
 
-        // Weather icon: value starts with "icon:"
+        // Weather icon: value "icon:CODE" or "icon:CODE:SIZE"
         if (strncmp(val, "icon:", 5) == 0) {
             int weatherCode = atoi(val + 5);
-            drawWeatherIcon(weatherCode, tx, ty, tw, th, color);
+            // Parse optional size after second colon
+            const char* sizeStr = strchr(val + 5, ':');
+            int iconSize = sizeStr ? atoi(sizeStr + 1) : 0;
+            if (iconSize > 0 && iconSize < tw && iconSize < th) {
+                // Center icon at specified size within bounding box
+                int ox = tx + (tw - iconSize) / 2;
+                int oy = ty + (th - iconSize) / 2;
+                drawWeatherIcon(weatherCode, ox, oy, iconSize, iconSize, color);
+            } else {
+                drawWeatherIcon(weatherCode, tx, ty, tw, th, color);
+            }
             return;
         }
 
