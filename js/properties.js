@@ -50,6 +50,16 @@
         return html;
     }
 
+    function stepperHtml(id, value, min, max) {
+        return '<div class="stepper">' +
+            '<button type="button" class="stepper-btn stepper-dec" data-for="' + id + '">\u2212</button>' +
+            '<input type="number" id="' + id + '" value="' + value + '"' +
+            (min !== undefined ? ' min="' + min + '"' : '') +
+            (max !== undefined ? ' max="' + max + '"' : '') + ' />' +
+            '<button type="button" class="stepper-btn stepper-inc" data-for="' + id + '">+</button>' +
+            '</div>';
+    }
+
     function showProperties(detail) {
         if (!detail || !detail.data) {
             clearProperties();
@@ -73,17 +83,17 @@
         // Position
         html += '<div class="prop-row-inline">';
         html += '<div class="prop-row"><label for="prop-x">X</label>';
-        html += '<input type="number" id="prop-x" value="' + detail.left + '" min="0" max="199" /></div>';
+        html += stepperHtml('prop-x', detail.left, 0, 199) + '</div>';
         html += '<div class="prop-row"><label for="prop-y">Y</label>';
-        html += '<input type="number" id="prop-y" value="' + detail.top + '" min="0" max="199" /></div>';
+        html += stepperHtml('prop-y', detail.top, 0, 199) + '</div>';
         html += '</div>';
 
         // Size
         html += '<div class="prop-row-inline">';
         html += '<div class="prop-row"><label for="prop-w">Width</label>';
-        html += '<input type="number" id="prop-w" value="' + detail.width + '" min="1" max="200" /></div>';
+        html += stepperHtml('prop-w', detail.width, 1, 200) + '</div>';
         html += '<div class="prop-row"><label for="prop-h">Height</label>';
-        html += '<input type="number" id="prop-h" value="' + detail.height + '" min="1" max="200" /></div>';
+        html += stepperHtml('prop-h', detail.height, 1, 200) + '</div>';
         html += '</div>';
 
         // Snap alignment
@@ -176,13 +186,24 @@
         html += '<div class="prop-section-label">Border</div>';
         html += '<div class="prop-row-inline">';
         html += '<div class="prop-row"><label for="prop-border-width">Width</label>';
-        html += '<input type="number" id="prop-border-width" value="' + bw + '" min="0" max="5" /></div>';
+        html += stepperHtml('prop-border-width', bw, 0, 5) + '</div>';
         html += '<div class="prop-row"><label for="prop-border-radius">Radius</label>';
-        html += '<input type="number" id="prop-border-radius" value="' + br + '" min="0" max="20" /></div>';
+        html += stepperHtml('prop-border-radius', br, 0, 20) + '</div>';
         html += '</div>';
         html += '<div class="prop-row" id="prop-padding-row"' + (bw > 0 ? '' : ' style="display:none"') + '>';
-        html += '<label for="prop-border-padding">Padding</label>';
-        html += '<input type="number" id="prop-border-padding" value="' + bp + '" min="0" max="20" /></div>';
+        html += '<label for="prop-border-padding">Inset</label>';
+        html += stepperHtml('prop-border-padding', bp, 0, 20) + '</div>';
+
+        // Text padding
+        var pt = d.padding_top || 0;
+        var pl = d.padding_left || 0;
+        html += '<div class="prop-section-label">Padding</div>';
+        html += '<div class="prop-row-inline">';
+        html += '<div class="prop-row"><label for="prop-pad-top">Top</label>';
+        html += stepperHtml('prop-pad-top', pt, 0, 50) + '</div>';
+        html += '<div class="prop-row"><label for="prop-pad-left">Left</label>';
+        html += stepperHtml('prop-pad-left', pl, 0, 50) + '</div>';
+        html += '</div>';
 
         // Advanced section — only show fields relevant to this type
         var hasAdvanced = !local; // local types only need ID, which is usually not edited
@@ -213,6 +234,7 @@
 
         panel.innerHTML = html;
         bindPropertyInputs(ctype, local);
+        bindSteppers();
 
         // Advanced toggle
         var toggle = document.getElementById('prop-advanced-toggle');
@@ -234,39 +256,46 @@
     function bindPropertyInputs(ctype, local) {
         var gi = CF.getInset || function () { return 0; };
 
-        // Position (property shows outer bounds, Fabric object is inset)
+        function getPadLeft() {
+            return currentObject.crispfaceData ? (currentObject.crispfaceData.padding_left || 0) : 0;
+        }
+        function getPadTop() {
+            return currentObject.crispfaceData ? (currentObject.crispfaceData.padding_top || 0) : 0;
+        }
+
+        // Position (property shows outer bounds, Fabric object is inset + padded)
         bindInput('prop-x', function (val) {
             var inset = gi(currentObject.crispfaceData);
-            updateObject(currentObject, { left: (parseInt(val, 10) || 0) + inset });
+            updateObject(currentObject, { left: (parseInt(val, 10) || 0) + inset + getPadLeft() });
         });
         bindInput('prop-y', function (val) {
             var inset = gi(currentObject.crispfaceData);
-            updateObject(currentObject, { top: (parseInt(val, 10) || 0) + inset });
+            updateObject(currentObject, { top: (parseInt(val, 10) || 0) + inset + getPadTop() });
         });
         bindInput('prop-w', function (val) {
             var inset = gi(currentObject.crispfaceData);
             var outerW = parseInt(val, 10) || 1;
-            updateObject(currentObject, { width: Math.max(outerW - inset * 2, 1), scaleX: 1 });
+            updateObject(currentObject, { width: Math.max(outerW - inset * 2 - getPadLeft(), 1), scaleX: 1 });
         });
 
         // Snap alignment buttons (use outer bounds)
         bindClick('snap-left', function () {
             var inset = gi(currentObject.crispfaceData);
-            updateObject(currentObject, { left: inset });
+            updateObject(currentObject, { left: inset + getPadLeft() });
             updatePropInput('prop-x', 0);
         });
         bindClick('snap-center', function () {
             var inset = gi(currentObject.crispfaceData);
-            var outerW = Math.round(currentObject.width * (currentObject.scaleX || 1)) + inset * 2;
+            var outerW = Math.round(currentObject.width * (currentObject.scaleX || 1)) + inset * 2 + getPadLeft();
             var outerX = Math.round((200 - outerW) / 2);
-            updateObject(currentObject, { left: outerX + inset });
+            updateObject(currentObject, { left: outerX + inset + getPadLeft() });
             updatePropInput('prop-x', outerX);
         });
         bindClick('snap-right', function () {
             var inset = gi(currentObject.crispfaceData);
-            var outerW = Math.round(currentObject.width * (currentObject.scaleX || 1)) + inset * 2;
+            var outerW = Math.round(currentObject.width * (currentObject.scaleX || 1)) + inset * 2 + getPadLeft();
             var outerX = 200 - outerW;
-            updateObject(currentObject, { left: outerX + inset });
+            updateObject(currentObject, { left: outerX + inset + getPadLeft() });
             updatePropInput('prop-x', outerX);
         });
         bindInput('prop-h', function (val) {
@@ -274,7 +303,7 @@
                 var inset = gi(currentObject.crispfaceData);
                 var outerH = parseInt(val, 10) || 40;
                 currentObject.crispfaceData.h = outerH;
-                updateObject(currentObject, { height: Math.max(outerH - inset * 2, 1) });
+                updateObject(currentObject, { height: Math.max(outerH - inset * 2 - getPadTop(), 1) });
             }
         });
 
@@ -414,7 +443,7 @@
                     left: currentObject.left + delta,
                     top: currentObject.top + delta,
                     width: Math.max(currentObject.width - delta * 2, 1),
-                    height: Math.max(currentObject.crispfaceData.h - newInset * 2, 1)
+                    height: Math.max(currentObject.crispfaceData.h - newInset * 2 - getPadTop(), 1)
                 });
             }
         });
@@ -438,7 +467,35 @@
                     left: currentObject.left + delta,
                     top: currentObject.top + delta,
                     width: Math.max(currentObject.width - delta * 2, 1),
-                    height: Math.max(currentObject.crispfaceData.h - newInset * 2, 1)
+                    height: Math.max(currentObject.crispfaceData.h - newInset * 2 - getPadTop(), 1)
+                });
+            }
+        });
+
+        // Text padding top
+        bindInput('prop-pad-top', function (val) {
+            if (currentObject.crispfaceData) {
+                var oldPad = currentObject.crispfaceData.padding_top || 0;
+                var newPad = parseInt(val, 10) || 0;
+                currentObject.crispfaceData.padding_top = newPad;
+                var delta = newPad - oldPad;
+                updateObject(currentObject, {
+                    top: currentObject.top + delta,
+                    height: Math.max(currentObject.height - delta, 1)
+                });
+            }
+        });
+
+        // Text padding left
+        bindInput('prop-pad-left', function (val) {
+            if (currentObject.crispfaceData) {
+                var oldPad = currentObject.crispfaceData.padding_left || 0;
+                var newPad = parseInt(val, 10) || 0;
+                currentObject.crispfaceData.padding_left = newPad;
+                var delta = newPad - oldPad;
+                updateObject(currentObject, {
+                    left: currentObject.left + delta,
+                    width: Math.max(currentObject.width - delta, 1)
                 });
             }
         });
@@ -458,6 +515,27 @@
                 currentObject.crispfaceData.stale_seconds = parseInt(val, 10) || 60;
             }
         });
+    }
+
+    function bindSteppers() {
+        var btns = panel.querySelectorAll('.stepper-btn');
+        for (var i = 0; i < btns.length; i++) {
+            (function (btn) {
+                btn.addEventListener('click', function () {
+                    var input = document.getElementById(btn.getAttribute('data-for'));
+                    if (!input || !currentObject) return;
+                    var val = parseInt(input.value, 10) || 0;
+                    var step = btn.classList.contains('stepper-inc') ? 1 : -1;
+                    var min = input.hasAttribute('min') ? parseInt(input.min, 10) : -Infinity;
+                    var max = input.hasAttribute('max') ? parseInt(input.max, 10) : Infinity;
+                    val += step;
+                    if (val < min) val = min;
+                    if (val > max) val = max;
+                    input.value = val;
+                    input.dispatchEvent(new Event('input'));
+                });
+            })(btns[i]);
+        }
     }
 
     function bindInput(id, handler) {

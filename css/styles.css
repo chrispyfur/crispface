@@ -486,6 +486,59 @@ body.editor-page .main-content {
     width: 50px;
 }
 
+/* Stepper inputs */
+.stepper {
+    display: flex;
+    align-items: stretch;
+}
+
+.stepper input[type="number"] {
+    flex: 1;
+    text-align: center;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    -moz-appearance: textfield;
+    min-width: 0;
+}
+
+.stepper input[type="number"]::-webkit-inner-spin-button,
+.stepper input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.stepper-btn {
+    width: 26px;
+    flex-shrink: 0;
+    border: 1px solid var(--gray-light);
+    background: #f5f5f5;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-dark);
+    padding: 0;
+    line-height: 1;
+}
+
+.stepper-btn:hover {
+    background: var(--gray-light);
+}
+
+.stepper-btn:active {
+    background: var(--orange);
+    color: #fff;
+    border-color: var(--orange);
+}
+
+.stepper-dec {
+    border-radius: 3px 0 0 3px;
+}
+
+.stepper-inc {
+    border-radius: 0 3px 3px 0;
+}
+
 .prop-row-inline {
     display: flex;
     gap: 8px;

@@ -566,10 +566,12 @@ private:
 
         // Inset text area by border width + padding (only when border exists)
         int inset = (bw > 0) ? (bw + bp) : 0;
-        int tx = x + inset;
-        int ty = y + inset;
-        int tw = w - inset * 2;
-        int th = h - inset * 2;
+        int pt = comp["pt"] | 0;
+        int pl = comp["pl"] | 0;
+        int tx = x + inset + pl;
+        int ty = y + inset + pt;
+        int tw = w - inset * 2 - pl;
+        int th = h - inset * 2 - pt;
         if (tw < 1) tw = 1;
         if (th < 1) th = 1;
 

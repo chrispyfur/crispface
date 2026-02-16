@@ -164,6 +164,8 @@ def _validate_complication(c):
         'border_width': max(0, min(5, int(c.get('border_width', 0)))),
         'border_radius': max(0, min(20, int(c.get('border_radius', 0)))),
         'border_padding': max(0, min(20, int(c.get('border_padding', 0)))),
+        'padding_top': max(0, min(50, int(c.get('padding_top', 0)))),
+        'padding_left': max(0, min(50, int(c.get('padding_left', 0)))),
         'content': validated_content,
         'sort_order': int(c.get('sort_order', 0))
     }

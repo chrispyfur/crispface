@@ -185,6 +185,8 @@ for face_id in face_ids:
             'bw': comp.get('border_width', 0),
             'br': comp.get('border_radius', 0),
             'bp': comp.get('border_padding', 0),
+            'pt': comp.get('padding_top', 0),
+            'pl': comp.get('padding_left', 0),
         }
 
         if is_local:
