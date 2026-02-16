@@ -139,44 +139,88 @@
             }
         });
 
-        // Draw complication borders after canvas render
+        // Draw complication borders and battery icon after canvas render
         canvas.on('after:render', function () {
             var ctx = canvas.getContext('2d');
             canvas.getObjects().forEach(function (obj) {
                 if (!obj.crispfaceData) return;
                 var d = obj.crispfaceData;
-                var bw = d.border_width || 0;
-                if (bw <= 0) return;
-
-                var br = d.border_radius || 0;
                 var col = (d.content && d.content.color === 'white') ? '#ffffff' : '#000000';
-                var ins = getInset(d);
-                var x = Math.round(obj.left) - ins;
-                var y = Math.round(obj.top) - ins;
-                var w = Math.round(obj.width * (obj.scaleX || 1)) + ins * 2;
-                var h = d.h || Math.round(obj.height * (obj.scaleY || 1));
 
-                ctx.save();
-                ctx.strokeStyle = col;
-                ctx.lineWidth = bw;
-                if (br > 0) {
-                    var r = Math.min(br, w / 2, h / 2);
-                    ctx.beginPath();
-                    ctx.moveTo(x + r, y);
-                    ctx.lineTo(x + w - r, y);
-                    ctx.arcTo(x + w, y, x + w, y + r, r);
-                    ctx.lineTo(x + w, y + h - r);
-                    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-                    ctx.lineTo(x + r, y + h);
-                    ctx.arcTo(x, y + h, x, y + h - r, r);
-                    ctx.lineTo(x, y + r);
-                    ctx.arcTo(x, y, x + r, y, r);
-                    ctx.closePath();
-                    ctx.stroke();
-                } else {
-                    ctx.strokeRect(x + bw / 2, y + bw / 2, w - bw, h - bw);
+                // Draw border
+                var bw = d.border_width || 0;
+                if (bw > 0) {
+                    var br = d.border_radius || 0;
+                    var ins = getInset(d);
+                    var bx = Math.round(obj.left) - ins;
+                    var by = Math.round(obj.top) - ins;
+                    var bww = Math.round(obj.width * (obj.scaleX || 1)) + ins * 2;
+                    var bh = d.h || Math.round(obj.height * (obj.scaleY || 1));
+
+                    ctx.save();
+                    ctx.strokeStyle = col;
+                    ctx.lineWidth = bw;
+                    if (br > 0) {
+                        var r = Math.min(br, bww / 2, bh / 2);
+                        ctx.beginPath();
+                        ctx.moveTo(bx + r, by);
+                        ctx.lineTo(bx + bww - r, by);
+                        ctx.arcTo(bx + bww, by, bx + bww, by + r, r);
+                        ctx.lineTo(bx + bww, by + bh - r);
+                        ctx.arcTo(bx + bww, by + bh, bx + bww - r, by + bh, r);
+                        ctx.lineTo(bx + r, by + bh);
+                        ctx.arcTo(bx, by + bh, bx, by + bh - r, r);
+                        ctx.lineTo(bx, by + r);
+                        ctx.arcTo(bx, by, bx + r, by, r);
+                        ctx.closePath();
+                        ctx.stroke();
+                    } else {
+                        ctx.strokeRect(bx + bw / 2, by + bw / 2, bww - bw, bh - bw);
+                    }
+                    ctx.restore();
                 }
-                ctx.restore();
+
+                // Draw battery icon (replaces text for icon mode)
+                var cType = d.complication_type || d.complication_id || '';
+                if (cType === 'battery' && (d.params || {}).display !== 'percentage' && (d.params || {}).display !== 'voltage') {
+                    var ix = Math.round(obj.left);
+                    var iy = Math.round(obj.top);
+                    var iw = Math.round(obj.width * (obj.scaleX || 1));
+                    var ih = Math.round(obj.height * (obj.scaleY || 1));
+
+                    // Clear text area and fill with background
+                    var bg = CF.faceData.background === 'black' ? '#000000' : '#ffffff';
+                    ctx.save();
+                    ctx.fillStyle = bg;
+                    ctx.fillRect(ix, iy, iw, ih);
+
+                    // Match firmware drawBatteryIcon
+                    var nubW = 2, gap = 1;
+                    var bodyW = iw - nubW - gap;
+                    if (bodyW < 6) bodyW = 6;
+
+                    // Body outline
+                    ctx.strokeStyle = col;
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(ix + 0.5, iy + 0.5, bodyW - 1, ih - 1);
+
+                    // Nub
+                    var nubH = Math.floor(ih * 2 / 5);
+                    if (nubH < 2) nubH = 2;
+                    var nubY = iy + Math.floor((ih - nubH) / 2);
+                    ctx.fillStyle = col;
+                    ctx.fillRect(ix + bodyW + gap, nubY, nubW, nubH);
+
+                    // Fill at 65% (preview)
+                    var pad = 2;
+                    var maxFillW = bodyW - pad * 2;
+                    var fillW = Math.floor(maxFillW * 0.65);
+                    if (fillW > 0) {
+                        ctx.fillRect(ix + pad, iy + pad, fillW, ih - pad * 2);
+                    }
+
+                    ctx.restore();
+                }
             });
         });
 
