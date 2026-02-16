@@ -190,6 +190,130 @@
             }
         });
 
+        // Weather icon drawing for editor preview (mirrors firmware drawWeatherIcon)
+        function drawWeatherIconPreview(ctx, code, x, y, w, h, col) {
+            var cx = x + w / 2, cy = y + h / 2;
+            var s = Math.min(w, h);
+
+            function cloudShape(cx, cy, s) {
+                var r1 = s * 0.3, r2 = s * 0.25;
+                var baseW = s * 0.75, baseH = s * 0.2;
+                var baseY = cy + r2 * 0.5;
+                ctx.fillStyle = col;
+                ctx.fillRect(cx - baseW / 2, baseY, baseW, baseH);
+                ctx.beginPath();
+                ctx.arc(cx - baseW / 4, baseY, r2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(cx, baseY - r1 / 3, r1, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(cx + baseW / 4, baseY, r2 - 1, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            function sunShape(cx, cy, s) {
+                var r = s / 5;
+                ctx.fillStyle = col;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.fill();
+                var dx = [10, 7, 0, -7, -10, -7, 0, 7];
+                var dy = [0, -7, -10, -7, 0, 7, 10, 7];
+                var inner = r + 2, outer = r * 2;
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 1;
+                for (var i = 0; i < 8; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(cx + dx[i] * inner / 10, cy + dy[i] * inner / 10);
+                    ctx.lineTo(cx + dx[i] * outer / 10, cy + dy[i] * outer / 10);
+                    ctx.stroke();
+                }
+            }
+
+            function rainDrops(cx, cy, s, count) {
+                var dropH = s / 6;
+                var spacing = s / (count + 1);
+                var startX = cx - (count - 1) * spacing / 2;
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 1;
+                for (var i = 0; i < count; i++) {
+                    var dx = startX + i * spacing;
+                    ctx.beginPath();
+                    ctx.moveTo(dx, cy);
+                    ctx.lineTo(dx - 1, cy + dropH);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(dx + 1, cy);
+                    ctx.lineTo(dx, cy + dropH);
+                    ctx.stroke();
+                }
+            }
+
+            function snowDots(cx, cy, s) {
+                var spacing = s / 4;
+                ctx.fillStyle = col;
+                for (var row = 0; row < 2; row++) {
+                    var dy = cy + row * spacing;
+                    var offset = row * spacing / 2;
+                    for (var i = 0; i < 3 - row; i++) {
+                        ctx.beginPath();
+                        ctx.arc(cx - spacing + offset + i * spacing, dy, 1.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+
+            function lightning(cx, cy, s) {
+                var bh = s * 0.4, bw = s / 6;
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cx + bw, cy);
+                ctx.lineTo(cx - bw / 2, cy + bh / 2);
+                ctx.lineTo(cx + bw / 2, cy + bh / 2);
+                ctx.lineTo(cx - bw, cy + bh);
+                ctx.stroke();
+            }
+
+            if (code <= 1) {
+                sunShape(cx, cy, s);
+            } else if (code <= 3) {
+                sunShape(cx + s / 5, cy - s / 5, s * 0.67);
+                cloudShape(cx - s / 8, cy + s / 8, s * 0.75);
+            } else if (code <= 6) {
+                // Fog: horizontal lines
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 2;
+                var pad = w / 8;
+                for (var i = 1; i <= 4; i++) {
+                    var ly = y + i * h / 5;
+                    var lx = x + pad + (i % 2 === 0 ? pad / 2 : 0);
+                    var lw = w - pad * 2 - (i % 2 === 0 ? pad / 2 : 0);
+                    ctx.beginPath();
+                    ctx.moveTo(lx, ly);
+                    ctx.lineTo(lx + lw, ly);
+                    ctx.stroke();
+                }
+            } else if (code <= 8) {
+                cloudShape(cx, cy - s / 8, s);
+            } else if (code <= 12) {
+                cloudShape(cx, cy - s / 4, s);
+                rainDrops(cx, cy + s / 5, s, 3);
+            } else if (code <= 15) {
+                cloudShape(cx, cy - s / 4, s);
+                rainDrops(cx, cy + s / 5, s, 5);
+            } else if (code <= 27) {
+                cloudShape(cx, cy - s / 4, s);
+                snowDots(cx, cy + s / 5, s);
+            } else if (code <= 30) {
+                cloudShape(cx, cy - s / 4, s);
+                lightning(cx, cy + s / 6, s);
+            } else {
+                cloudShape(cx, cy - s / 8, s);
+            }
+        }
+
         // Draw complication borders and battery icon after canvas render
         canvas.on('after:render', function () {
             var ctx = canvas.getContext('2d');
@@ -272,6 +396,14 @@
                         ctx.fillRect(ix + pad, iy + pad, fillW, ih - pad * 2);
                     }
 
+                    ctx.restore();
+                } else if (d.type === 'text' && d.content && String(d.content.value || '').indexOf('icon:') === 0) {
+                    // Weather icon preview
+                    var weatherCode = parseInt(String(d.content.value).substring(5), 10) || 0;
+                    ctx.save();
+                    ctx.fillStyle = bg;
+                    ctx.fillRect(ix, iy, iw, ih);
+                    drawWeatherIconPreview(ctx, weatherCode, ix, iy, iw, ih, col);
                     ctx.restore();
                 } else if (d.type === 'text' && d.content) {
                     // Draw text matching firmware's drawAligned() algorithm
