@@ -210,13 +210,15 @@
                 html += '<div class="prop-row"><label for="prop-source">Source</label>';
                 html += '<input type="text" id="prop-source" value="' + escHtml(d.source || '') + '" placeholder="e.g. /crispface/api/sources/weather.py" /></div>';
 
-                // Needs refresh + refresh interval (server complications only)
-                var staleEnabled = d.stale_enabled !== false;
-                html += '<div class="prop-row"><label for="prop-stale-enabled">Needs refresh</label>';
-                html += '<input type="checkbox" id="prop-stale-enabled"' + (staleEnabled ? ' checked' : '') + ' /></div>';
+                // Needs refresh + refresh interval (only when source is set)
+                if (d.source) {
+                    var staleEnabled = d.stale_enabled !== false;
+                    html += '<div class="prop-row"><label for="prop-stale-enabled">Needs refresh</label>';
+                    html += '<input type="checkbox" id="prop-stale-enabled"' + (staleEnabled ? ' checked' : '') + ' /></div>';
 
-                html += '<div class="prop-row" id="prop-stale-row"' + (staleEnabled ? '' : ' style="display:none"') + '><label for="prop-stale">Refresh after</label>';
-                html += '<input type="number" id="prop-stale" value="' + (d.stale_seconds || 60) + '" min="1" /></div>';
+                    html += '<div class="prop-row" id="prop-stale-row"' + (staleEnabled ? '' : ' style="display:none"') + '><label for="prop-stale">Refresh after</label>';
+                    html += '<input type="number" id="prop-stale" value="' + (d.stale_seconds || 60) + '" min="1" /></div>';
+                }
             }
 
             html += '</div>'; // end .prop-advanced
