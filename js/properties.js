@@ -40,16 +40,6 @@
         return html;
     }
 
-    function alignOptionsHtml(selected) {
-        var html = '';
-        var aligns = CF.ALIGNS;
-        for (var i = 0; i < aligns.length; i++) {
-            var sel = aligns[i] === selected ? ' selected' : '';
-            html += '<option value="' + aligns[i] + '"' + sel + '>' + aligns[i].charAt(0).toUpperCase() + aligns[i].slice(1) + '</option>';
-        }
-        return html;
-    }
-
     function stepperHtml(id, value, min, max) {
         return '<div class="stepper">' +
             '<button type="button" class="stepper-btn stepper-dec" data-for="' + id + '">\u2212</button>' +
@@ -167,16 +157,14 @@
             html += '<input type="checkbox" id="prop-italic"' + (content.italic ? ' checked' : '') + ' /></div>';
             html += '</div>';
 
-            // Align + Color
-            html += '<div class="prop-row-inline">';
-            html += '<div class="prop-row"><label for="prop-align">Align</label>';
-            html += '<select id="prop-align">' + alignOptionsHtml(content.align || 'left') + '</select></div>';
-            html += '<div class="prop-row"><label for="prop-color">Color</label>';
-            html += '<select id="prop-color">';
-            html += '<option value="white"' + (content.color === 'white' ? ' selected' : '') + '>White</option>';
-            html += '<option value="black"' + (content.color === 'black' ? ' selected' : '') + '>Black</option>';
-            html += '</select></div>';
-            html += '</div>';
+            // Align (button group)
+            var curAlign = content.align || 'left';
+            html += '<div class="prop-row prop-snap-row"><label>Align</label>';
+            html += '<div class="prop-snap-buttons">';
+            html += '<button type="button" class="prop-snap-btn prop-align-btn' + (curAlign === 'left' ? ' active' : '') + '" data-align="left">Left</button>';
+            html += '<button type="button" class="prop-snap-btn prop-align-btn' + (curAlign === 'center' ? ' active' : '') + '" data-align="center">Centre</button>';
+            html += '<button type="button" class="prop-snap-btn prop-align-btn' + (curAlign === 'right' ? ' active' : '') + '" data-align="right">Right</button>';
+            html += '</div></div>';
         }
 
         // Border (all complications)
@@ -340,7 +328,8 @@
                         // For "text" type, the text variable IS the display value
                         if (compTypeId === 'text' && varName === 'text') {
                             currentObject.crispfaceData.content.value = val;
-                            updateObject(currentObject, { text: val });
+                            currentObject.dirty = true;
+                            CF.canvas.renderAll();
                         }
                     };
                     if (isCheckbox || isSelect) {
@@ -374,7 +363,8 @@
         bindInput('prop-value', function (val) {
             if (currentObject.crispfaceData) {
                 currentObject.crispfaceData.content.value = val;
-                updateObject(currentObject, { text: val });
+                currentObject.dirty = true;
+                CF.canvas.renderAll();
             }
         });
 
@@ -382,18 +372,17 @@
         bindInput('prop-family', function (val) {
             if (currentObject.crispfaceData) {
                 currentObject.crispfaceData.content.family = val;
-                updateObject(currentObject, { fontFamily: val });
+                currentObject.dirty = true;
+                CF.canvas.renderAll();
             }
         });
 
         // Font size
         bindInput('prop-size', function (val) {
             if (currentObject.crispfaceData) {
-                var stored = parseInt(val, 10);
-                var displayMap = CF.DISPLAY_SIZE_MAP || {};
-                var display = displayMap[stored] || stored;
-                currentObject.crispfaceData.content.size = stored;
-                updateObject(currentObject, { fontSize: display });
+                currentObject.crispfaceData.content.size = parseInt(val, 10);
+                currentObject.dirty = true;
+                CF.canvas.renderAll();
             }
         });
 
@@ -401,7 +390,8 @@
         bindCheckbox('prop-bold', function (checked) {
             if (currentObject.crispfaceData) {
                 currentObject.crispfaceData.content.bold = checked;
-                updateObject(currentObject, { fontWeight: checked ? 'bold' : 'normal' });
+                currentObject.dirty = true;
+                CF.canvas.renderAll();
             }
         });
 
@@ -409,25 +399,28 @@
         bindCheckbox('prop-italic', function (checked) {
             if (currentObject.crispfaceData) {
                 currentObject.crispfaceData.content.italic = checked;
-                updateObject(currentObject, { fontStyle: checked ? 'italic' : 'normal' });
+                currentObject.dirty = true;
+                CF.canvas.renderAll();
             }
         });
 
-        // Align
-        bindInput('prop-align', function (val) {
-            if (currentObject.crispfaceData) {
-                currentObject.crispfaceData.content.align = val;
-                updateObject(currentObject, { textAlign: val });
-            }
-        });
-
-        // Color
-        bindInput('prop-color', function (val) {
-            if (currentObject.crispfaceData) {
-                currentObject.crispfaceData.content.color = val;
-                updateObject(currentObject, { fill: val === 'white' ? '#ffffff' : '#000000' });
-            }
-        });
+        // Align buttons
+        var alignBtns = panel.querySelectorAll('.prop-align-btn');
+        for (var ai = 0; ai < alignBtns.length; ai++) {
+            (function (btn) {
+                btn.addEventListener('click', function () {
+                    if (!currentObject || !currentObject.crispfaceData) return;
+                    var val = btn.getAttribute('data-align');
+                    currentObject.crispfaceData.content.align = val;
+                    currentObject.dirty = true;
+                    CF.canvas.renderAll();
+                    // Update active state
+                    var all = panel.querySelectorAll('.prop-align-btn');
+                    for (var j = 0; j < all.length; j++) all[j].classList.remove('active');
+                    btn.classList.add('active');
+                });
+            })(alignBtns[ai]);
+        }
 
         // Border width — reposition Fabric object to keep outer bounds stable
         bindInput('prop-border-width', function (val) {
