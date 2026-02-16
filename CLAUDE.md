@@ -77,7 +77,7 @@ curl -H "Authorization: Bearer REDACTED_API_TOKEN" \
 - **Stale data**: rendered in fake italic (per-row pixel X-shear on glyph bitmaps)
 - **Sync interval**: max stale_seconds of non-local complications (minimum 300s)
 - **Partial refresh** by default (no flicker). Double-press top-left for full refresh (clears ghosting)
-- **Fonts**: FreeSans, FreeSerif, FreeMono (regular+bold) at 9/12/18/24/48pt. Custom 48pt fonts generated via `firmware/generate_fonts.sh`
+- **Fonts**: FreeSans, FreeSerif, FreeMono (regular+bold) at 9/12/18/24/36/48pt. Custom 36pt+48pt fonts generated via `firmware/generate_fonts.sh`
 
 ### Font Size Mapping (editor stored value → Adafruit GFX pt)
 | Stored | GFX pt | ~px on watch |
@@ -86,6 +86,7 @@ curl -H "Authorization: Bearer REDACTED_API_TOKEN" \
 | 16     | 12pt   | 17px        |
 | 24     | 18pt   | 25px        |
 | 48     | 24pt   | 33px        |
+| 60     | 36pt   | 51px        |
 | 72     | 48pt   | 67px        |
 
 ### Font Families
