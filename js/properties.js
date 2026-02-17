@@ -655,6 +655,7 @@
             document.getElementById('feed-save').addEventListener('click', function () {
                 var name = document.getElementById('feed-name').value.trim();
                 var url = document.getElementById('feed-url').value.trim();
+                if (url.indexOf('webcal://') === 0) url = 'https://' + url.substring(9);
                 var bold = document.getElementById('feed-bold').checked;
                 var alert = document.getElementById('feed-alert').checked;
                 var insistent = document.getElementById('feed-insistent').checked;
