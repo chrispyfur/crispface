@@ -7,3 +7,4 @@ firmware/.pio/
 firmware/include/config.h
 firmware-builds/*.bin
 firmware-builds/*.manifest.json
+lib/secrets.py

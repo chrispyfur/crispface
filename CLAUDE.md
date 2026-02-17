@@ -54,8 +54,8 @@ cd firmware && pio run -e watchy
 tail -f /var/www/users/playground/playground.crisprain.co.uk/logs/playground.crisprain.co.uk.error.log
 
 # Test the watch faces API endpoint
-curl -H "Authorization: Bearer REDACTED_API_TOKEN" \
-  "https://playground.crisprain.co.uk/crispface/api/watch_faces.py?watch_id=REDACTED_WATCH_ID"
+curl -H "Authorization: Bearer YOUR_API_TOKEN" \
+  "https://playground.crisprain.co.uk/crispface/api/watch_faces.py?watch_id=YOUR_WATCH_ID"
 ```
 
 ## Architecture Notes

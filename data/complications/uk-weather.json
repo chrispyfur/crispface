@@ -4,7 +4,7 @@
     "description": "UK weather forecast via Met Office DataHub API.",
     "script": "uk_weather.py",
     "variables": [
-        {"name": "apikey", "label": "API Key", "default": "REDACTED_METOFFICE_API_KEY"},
+        {"name": "apikey", "label": "API Key", "default": ""},
         {"name": "town", "label": "Town", "default": "Derby"},
         {"name": "display", "label": "Display", "type": "select",
          "options": "summary,temp,feels,conditions,wind,humidity,uv,precip,detail,icon,rainstop"},

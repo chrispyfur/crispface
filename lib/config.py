@@ -21,8 +21,13 @@ USERS_FILE = os.path.join(DATA_DIR, 'users.json')
 BASE_URL = '/crispface'
 SITE_NAME = 'CrispFace'
 
-# HMAC cookie signing key — change this in production
-SECRET_KEY = 'REDACTED_SECRET_KEY'
+# HMAC cookie signing key — loaded from gitignored secrets file
+_secrets_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'secrets.py')
+if os.path.exists(_secrets_path):
+    with open(_secrets_path) as _f:
+        exec(_f.read())
+else:
+    raise RuntimeError('lib/secrets.py not found — copy lib/secrets.py.example and set a strong SECRET_KEY')
 
 COOKIE_NAME = 'crispface_auth'
 COOKIE_MAX_AGE = 3600  # 1 hour
