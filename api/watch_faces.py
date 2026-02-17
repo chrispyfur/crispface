@@ -212,6 +212,25 @@ for face_id in face_ids:
         'complications': resolved_complications,
     })
 
+# Deduplicate alerts across all faces/complications
+seen_uids = set()
+for face in faces:
+    for comp in face['complications']:
+        if 'alerts' not in comp:
+            continue
+        deduped = []
+        for alert in comp['alerts']:
+            uid = alert.pop('uid', None)
+            if uid:
+                if uid in seen_uids:
+                    continue
+                seen_uids.add(uid)
+            deduped.append(alert)
+        if deduped:
+            comp['alerts'] = deduped
+        else:
+            del comp['alerts']
+
 respond({
     'success': True,
     'faces': faces,

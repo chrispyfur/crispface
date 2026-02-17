@@ -286,6 +286,7 @@ for feed in feeds:
 
     # Tag events with per-feed flags
     for ev in events:
+        ev['_feed_url'] = url
         if bold:
             ev['_bold'] = True
         if feed_alert or feed_insistent:
@@ -333,10 +334,14 @@ if any_alerts:
         title = ev.get('summary', 'Event')
         loc = ev.get('location', '')
         alert_text = title if not loc else '{}\n@ {}'.format(title, loc)
+        feed_url = ev.get('_feed_url', '')
+        dt_iso = ev['dtstart'].isoformat() if ev.get('dtstart') else ''
+        uid = hashlib.md5((feed_url + '|' + dt_iso + '|' + title).encode()).hexdigest()[:16]
         alerts.append({
             'min': minutes_from_now,
             'text': alert_text[:59],
-            'ins': bool(ev.get('_insistent'))
+            'ins': bool(ev.get('_insistent')),
+            'uid': uid,
         })
     # Sort by nearest first, cap at 10
     alerts.sort(key=lambda a: a['min'])
