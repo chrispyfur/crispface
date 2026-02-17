@@ -965,12 +965,20 @@ body.simulating .canvas-container-wrapper {
     white-space: nowrap;
 }
 
-.prop-feed-bold-badge {
+.prop-feed-bold-badge,
+.prop-feed-alert-badge {
     font-size: 10px;
     font-weight: 700;
-    color: var(--orange);
     letter-spacing: 0.5px;
     flex-shrink: 0;
+}
+
+.prop-feed-bold-badge {
+    color: var(--orange);
+}
+
+.prop-feed-alert-badge {
+    color: var(--blue-dark);
 }
 
 .prop-feed-item .btn-sm {

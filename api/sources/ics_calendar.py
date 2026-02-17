@@ -17,8 +17,6 @@ max_events = int(qs.get('events', ['3'])[0])
 days_ahead = int(qs.get('days', ['1'])[0])
 detail = qs.get('detail', ['title'])[0]
 max_chars = int(qs.get('maxchars', ['20'])[0])
-alert_enabled = qs.get('alert', ['false'])[0].lower() == 'true'
-insistent_enabled = qs.get('insistent', ['false'])[0].lower() == 'true'
 
 if max_events < 1:
     max_events = 1
@@ -255,11 +253,18 @@ def fetch_ics(url):
 start, end = calc_time_window(days_ahead)
 all_events = []
 
+any_alerts = False
+
 for feed in feeds:
     url = feed.get('url', '').strip()
     if not url:
         continue
     bold = feed.get('bold', False)
+    feed_alert = feed.get('alert', False)
+    feed_insistent = feed.get('insistent', False)
+
+    if feed_alert or feed_insistent:
+        any_alerts = True
 
     ics_text = fetch_ics(url)
     if not ics_text:
@@ -268,12 +273,27 @@ for feed in feeds:
     events = parse_ics_events(ics_text)
     events = filter_events(events, start, end)
 
-    # Tag events with bold flag from this feed
-    if bold:
-        for ev in events:
+    # Tag events with per-feed flags
+    for ev in events:
+        if bold:
             ev['_bold'] = True
+        if feed_alert or feed_insistent:
+            ev['_alert'] = True
+            if feed_insistent:
+                ev['_insistent'] = True
 
     all_events.extend(events)
+
+# Backwards compat: top-level alert/insistent params (legacy faces)
+legacy_alert = qs.get('alert', ['false'])[0].lower() == 'true'
+legacy_insistent = qs.get('insistent', ['false'])[0].lower() == 'true'
+if legacy_alert or legacy_insistent:
+    any_alerts = True
+    for ev in all_events:
+        if not ev.get('_alert'):
+            ev['_alert'] = True
+            if legacy_insistent:
+                ev['_insistent'] = True
 
 # Sort combined events by start time and limit
 all_events.sort(key=lambda e: e['dtstart'])
@@ -283,11 +303,13 @@ value_text = format_events(all_events, detail, max_chars)
 
 result = {'value': value_text}
 
-# Build alerts array when alert or insistent is enabled
-if alert_enabled or insistent_enabled:
+# Build alerts array from events that have alert enabled
+if any_alerts:
     now = datetime.now(timezone.utc)
     alerts = []
     for ev in all_events:
+        if not ev.get('_alert'):
+            continue
         # Skip all-day events and past events
         if ev.get('all_day'):
             continue
@@ -303,7 +325,7 @@ if alert_enabled or insistent_enabled:
         alerts.append({
             'min': minutes_from_now,
             'text': alert_text[:59],
-            'ins': insistent_enabled
+            'ins': bool(ev.get('_insistent'))
         })
     # Sort by nearest first, cap at 10
     alerts.sort(key=lambda a: a['min'])

@@ -118,6 +118,7 @@
                             html += '<div class="prop-feed-item" data-feed-idx="' + fi + '">';
                             html += '<span class="prop-feed-name">' + escHtml(feedsList[fi].name || 'Unnamed') + '</span>';
                             if (feedsList[fi].bold) html += '<span class="prop-feed-bold-badge">BOLD</span>';
+                            if (feedsList[fi].alert) html += '<span class="prop-feed-alert-badge">ALERT</span>';
                             html += '<button type="button" class="prop-feed-edit btn btn-sm btn-secondary" data-feed-idx="' + fi + '">Edit</button>';
                             html += '<button type="button" class="prop-feed-delete btn btn-sm btn-danger" data-feed-idx="' + fi + '">Del</button>';
                             html += '</div>';
@@ -638,6 +639,8 @@
                 '<div class="form-group"><label for="feed-url">Feed URL</label>' +
                 '<input type="text" id="feed-url" value="' + escHtml(feed ? feed.url : '') + '" placeholder="https://..." /></div>' +
                 '<div class="form-group"><label><input type="checkbox" id="feed-bold"' + (feed && feed.bold ? ' checked' : '') + ' /> Bold (UPPERCASE events)</label></div>' +
+                '<div class="form-group"><label><input type="checkbox" id="feed-alert"' + (feed && feed.alert ? ' checked' : '') + ' /> Alert before events</label></div>' +
+                '<div class="form-group"><label><input type="checkbox" id="feed-insistent"' + (feed && feed.insistent ? ' checked' : '') + ' /> Insistent alert</label></div>' +
                 '<div class="prop-feed-modal-actions">' +
                 '<button type="button" class="btn btn-primary" id="feed-save">Save</button>' +
                 '<button type="button" class="btn btn-secondary" id="feed-cancel">Cancel</button>' +
@@ -653,10 +656,15 @@
                 var name = document.getElementById('feed-name').value.trim();
                 var url = document.getElementById('feed-url').value.trim();
                 var bold = document.getElementById('feed-bold').checked;
+                var alert = document.getElementById('feed-alert').checked;
+                var insistent = document.getElementById('feed-insistent').checked;
                 if (!url) { document.getElementById('feed-url').focus(); return; }
                 if (!name) name = 'Calendar';
                 overlay.remove();
-                onSave({ name: name, url: url, bold: bold });
+                var feedData = { name: name, url: url, bold: bold };
+                if (alert) feedData.alert = true;
+                if (insistent) feedData.insistent = true;
+                onSave(feedData);
             });
 
             document.getElementById('feed-cancel').addEventListener('click', function () {

@@ -40,18 +40,6 @@
             "min": 5,
             "max": 50,
             "default": "20"
-        },
-        {
-            "name": "alert",
-            "label": "Alert before events",
-            "type": "checkbox",
-            "default": "false"
-        },
-        {
-            "name": "insistent",
-            "label": "Insistent alert",
-            "type": "checkbox",
-            "default": "false"
         }
     ],
     "created_at": "2026-02-12T00:00:00+00:00",
