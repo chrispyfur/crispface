@@ -309,6 +309,7 @@
         });
 
         // Variable inputs (typed complications)
+        var _repollTimer = null;
         if (ctype && ctype.variables && ctype.variables.length > 0) {
             var compTypeId = currentObject.crispfaceData ? currentObject.crispfaceData.complication_type : '';
             var varInputs = panel.querySelectorAll('.prop-var-input');
@@ -333,6 +334,15 @@
                             currentObject.crispfaceData.content.value = val;
                             currentObject.dirty = true;
                             CF.canvas.renderAll();
+                        }
+                        // Re-poll source to refresh preview with new params
+                        if (CF.repollSource && currentObject.crispfaceData.source) {
+                            if (_repollTimer) clearTimeout(_repollTimer);
+                            // Immediate for selects, debounced for text inputs
+                            var delay = isSelect ? 0 : 800;
+                            _repollTimer = setTimeout(function () {
+                                CF.repollSource(currentObject);
+                            }, delay);
                         }
                     };
                     if (isCheckbox || isSelect) {

@@ -852,6 +852,18 @@
         obj._pollTimer = setInterval(poll, interval);
     }
 
+    // Re-poll a single object: clear existing timer and restart
+    function repollSource(obj) {
+        if (!obj || !obj.crispfaceData) return;
+        if (obj._pollTimer) {
+            clearInterval(obj._pollTimer);
+            obj._pollTimer = null;
+        }
+        if (obj.crispfaceData.source) {
+            pollSource(obj);
+        }
+    }
+
     function stopAllPolling() {
         if (!canvas) return;
         var objects = canvas.getObjects();
@@ -1160,7 +1172,7 @@
                 }
             }
 
-            createTextComplication({
+            var newObj = createTextComplication({
                 complication_type: typeId || '',
                 x: 10,
                 y: 10,
@@ -1176,6 +1188,10 @@
                     align: 'left'
                 }
             });
+            // Start polling immediately for sourced complications
+            if (source && newObj.crispfaceData) {
+                pollSource(newObj);
+            }
         });
 
         document.getElementById('btn-delete').addEventListener('click', function () {
@@ -1262,6 +1278,7 @@
                 window.CRISPFACE.serializeFace = serializeFace;
                 window.CRISPFACE.syncBackground = syncBackground;
                 window.CRISPFACE.findType = findType;
+                window.CRISPFACE.repollSource = repollSource;
             }).catch(function () {
                 alert('Failed to load face');
                 window.location.href = CF.baseUrl + '/faces.html';
