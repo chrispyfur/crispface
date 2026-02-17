@@ -80,11 +80,12 @@ public:
             if (cfFaceCount > 0) cfNeedsSync = false;
         }
 
-        // If insistent notification is active, show it and buzz
+        // Insistent notification: buzz first (privacy), then show text on button press
         if (cfNotifActive && cfNotifInsistent) {
-            renderNotification();
-            insistentBuzzLoop();
-            return;
+            insistentBuzzLoop();       // buzzes until button press or timeout
+            cfNotifInsistent = false;  // stop buzzing phase, keep notif active
+            renderNotification();      // now reveal the notification text
+            return;                    // next button press dismisses via handleButtonPress
         }
 
         int now = makeTime(currentTime);
@@ -239,15 +240,15 @@ private:
         display.display(true);
     }
 
+    // Buzz until any button is pressed or timeout. Does NOT dismiss the
+    // notification — caller shows the text after this returns.
     void insistentBuzzLoop() {
         // Enable all button pins with pull-ups for reliable polling
-        // (plain INPUT loses RTC pull-up config, pins may float)
         pinMode(UP_BTN_PIN, INPUT_PULLUP);
         pinMode(DOWN_BTN_PIN, INPUT_PULLUP);
         pinMode(BACK_BTN_PIN, INPUT_PULLUP);
         pinMode(MENU_BTN_PIN, INPUT_PULLUP);
 
-        // Timeout after 2 minutes to prevent stuck watch
         int cycles = 0;
         const int maxCycles = 24; // 24 × 5s = 2 minutes
 
@@ -255,27 +256,16 @@ private:
             vibMotor(75, 4);
             cycles++;
 
-            // Wait 5 seconds, polling all buttons every 100ms
             for (int i = 0; i < 50; i++) {
                 delay(100);
                 if (digitalRead(UP_BTN_PIN) == LOW ||
                     digitalRead(DOWN_BTN_PIN) == LOW ||
                     digitalRead(BACK_BTN_PIN) == LOW ||
                     digitalRead(MENU_BTN_PIN) == LOW) {
-                    cfNotifActive = false;
-                    cfNotifInsistent = false;
-                    cfNotifPreAlert = false;
-                    cfNotifText[0] = '\0';
-                    return;
+                    return; // button pressed — caller will show notification
                 }
             }
         }
-
-        // Timeout: auto-dismiss so the watch isn't stuck
-        cfNotifActive = false;
-        cfNotifInsistent = false;
-        cfNotifPreAlert = false;
-        cfNotifText[0] = '\0';
     }
 
     // ---- Server sync ----
