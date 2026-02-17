@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Complications - CrispFace</title>
+    <title>Users - CrispFace</title>
     <link rel="stylesheet" href="/crispface/css/styles.css" />
 </head>
-<body data-page="complications">
+<body data-page="users">
 <div class="layout">
     <nav class="sidebar">
         <div class="sidebar-brand" id="sidebar-brand">
@@ -18,9 +18,9 @@
         </div>
         <ul class="sidebar-nav">
             <li><a href="/crispface/faces.html">Faces</a></li>
-            <li><a href="/crispface/complications.html" class="active">Complications</a></li>
+            <li><a href="/crispface/complications.html">Complications</a></li>
             <li><a href="/crispface/flash.html">Flash</a></li>
-            <li class="admin-only" style="display:none;"><a href="/crispface/users.html">Users</a></li>
+            <li class="admin-only" style="display:none;"><a href="/crispface/users.html" class="active">Users</a></li>
         </ul>
         <div class="sidebar-user">
             <span id="sidebar-user"></span> &middot;
@@ -29,13 +29,13 @@
     </nav>
     <main class="main-content">
         <div class="page-header">
-            <h1>Complications</h1>
-            <button type="button" class="btn btn-primary" id="btn-new-type">New Type</button>
+            <h1>Users</h1>
+            <button type="button" class="btn btn-primary" id="btn-new-user">New User</button>
         </div>
         <div id="empty-state" class="empty-state" style="display:none;">
-            <p>No complication types yet. Create one to get started.</p>
+            <p>No users yet.</p>
         </div>
-        <div id="type-grid" class="face-grid"></div>
+        <div id="user-grid" class="face-grid"></div>
     </main>
 </div>
 <script src="/crispface/js/app.js?v=3"></script>

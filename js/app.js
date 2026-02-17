@@ -119,10 +119,18 @@
                 return;
             }
             window.CRISPFACE.user = data.user;
+            window.CRISPFACE.role = data.role || 'user';
             // Set username in sidebar
             var userEl = document.getElementById('sidebar-user');
             if (userEl) {
                 userEl.textContent = data.user;
+            }
+            // Show admin-only nav items
+            if (data.role === 'admin') {
+                var adminItems = document.querySelectorAll('.admin-only');
+                for (var ai = 0; ai < adminItems.length; ai++) {
+                    adminItems[ai].style.display = '';
+                }
             }
             // Init watch selector, then call page callback
             initWatchSelector(function (watchId) {
@@ -508,9 +516,16 @@
     // ---- Complications list page ----
     function initComplications() {
         requireAuth(function () {
+            var isAdmin = window.CRISPFACE.role === 'admin';
+            var newBtn = document.getElementById('btn-new-type');
+
+            if (!isAdmin) {
+                newBtn.style.display = 'none';
+            }
+
             loadTypeList();
 
-            document.getElementById('btn-new-type').addEventListener('click', function () {
+            newBtn.addEventListener('click', function () {
                 api('POST', '/api/complications.py', { name: 'New Type' }).then(function (data) {
                     if (data.success) {
                         window.location.href = BASE_URL + '/complication-edit.html?id=' + data.type.id;
@@ -545,26 +560,35 @@
     function createTypeCard(ctype) {
         var card = document.createElement('div');
         card.className = 'face-card';
+        var isAdmin = window.CRISPFACE.role === 'admin';
 
         var varCount = (ctype.variables || []).length;
+
+        var actionsHtml = '';
+        if (isAdmin) {
+            actionsHtml =
+                '<div class="face-actions">' +
+                '<a href="' + BASE_URL + '/complication-edit.html?id=' + escHtml(ctype.id) + '" class="btn btn-primary btn-sm">Edit</a>' +
+                '<button type="button" class="btn btn-danger btn-sm" data-delete="' + escHtml(ctype.id) + '">Delete</button>' +
+                '</div>';
+        }
 
         card.innerHTML =
             '<h3>' + escHtml(ctype.name) + '</h3>' +
             '<p class="face-meta">' + escHtml(ctype.description || 'No description') + '</p>' +
             '<p class="face-meta">' + varCount + ' variable' + (varCount !== 1 ? 's' : '') + '</p>' +
-            '<div class="face-actions">' +
-            '<a href="' + BASE_URL + '/complication-edit.html?id=' + escHtml(ctype.id) + '" class="btn btn-primary btn-sm">Edit</a>' +
-            '<button type="button" class="btn btn-danger btn-sm" data-delete="' + escHtml(ctype.id) + '">Delete</button>' +
-            '</div>';
+            actionsHtml;
 
-        card.querySelector('[data-delete]').addEventListener('click', function () {
-            if (!confirm('Delete "' + ctype.name + '"? This will also delete its script.')) return;
-            api('DELETE', '/api/complication.py?id=' + ctype.id).then(function (resp) {
-                if (resp.success) {
-                    loadTypeList();
-                }
+        if (isAdmin) {
+            card.querySelector('[data-delete]').addEventListener('click', function () {
+                if (!confirm('Delete "' + ctype.name + '"? This will also delete its script.')) return;
+                api('DELETE', '/api/complication.py?id=' + ctype.id).then(function (resp) {
+                    if (resp.success) {
+                        loadTypeList();
+                    }
+                });
             });
-        });
+        }
 
         return card;
     }
@@ -1088,6 +1112,133 @@
         }
     }
 
+    // ---- Users page (admin only) ----
+    function initUsers() {
+        requireAuth(function () {
+            if (window.CRISPFACE.role !== 'admin') {
+                window.location.href = BASE_URL + '/faces.html';
+                return;
+            }
+            loadUserList();
+
+            document.getElementById('btn-new-user').addEventListener('click', function () {
+                showNewUserModal();
+            });
+        });
+    }
+
+    function loadUserList() {
+        api('GET', '/api/users.py').then(function (data) {
+            if (!data.success) return;
+            var grid = document.getElementById('user-grid');
+            var empty = document.getElementById('empty-state');
+
+            if (data.users.length === 0) {
+                grid.style.display = 'none';
+                empty.style.display = 'block';
+                return;
+            }
+
+            empty.style.display = 'none';
+            grid.style.display = 'grid';
+            grid.innerHTML = '';
+
+            for (var i = 0; i < data.users.length; i++) {
+                grid.appendChild(createUserCard(data.users[i]));
+            }
+        });
+    }
+
+    function createUserCard(u) {
+        var card = document.createElement('div');
+        card.className = 'face-card';
+
+        var isSelf = u.username === window.CRISPFACE.user;
+        var roleLabel = u.role === 'admin' ? 'Admin' : 'User';
+
+        card.innerHTML =
+            '<h3>' + escHtml(u.username) + '</h3>' +
+            '<p class="face-meta">' + escHtml(roleLabel) + '</p>' +
+            '<div class="face-actions">' +
+            (isSelf ? '' : '<button type="button" class="btn btn-danger btn-sm" data-delete="' + escHtml(u.id) + '">Delete</button>') +
+            '</div>';
+
+        if (!isSelf) {
+            card.querySelector('[data-delete]').addEventListener('click', function () {
+                if (!confirm('Delete user "' + u.username + '"? This will remove all their data.')) return;
+                api('DELETE', '/api/user.py?id=' + u.id).then(function (resp) {
+                    if (resp.success) {
+                        loadUserList();
+                    }
+                });
+            });
+        }
+
+        return card;
+    }
+
+    function showNewUserModal() {
+        var existing = document.getElementById('new-user-modal');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'dup-modal-overlay';
+        overlay.id = 'new-user-modal';
+
+        var card = document.createElement('div');
+        card.className = 'dup-modal-card';
+        card.innerHTML =
+            '<h3>New User</h3>' +
+            '<div class="form-group"><label for="new-username">Username</label>' +
+            '<input type="text" id="new-username" placeholder="username" /></div>' +
+            '<div class="form-group"><label for="new-password">Password</label>' +
+            '<input type="password" id="new-password" placeholder="password" /></div>' +
+            '<div class="form-group"><label for="new-role">Role</label>' +
+            '<select id="new-role"><option value="user">User</option><option value="admin">Admin</option></select></div>' +
+            '<p id="new-user-error" style="color:#E53935;display:none;"></p>' +
+            '<div class="dup-modal-actions">' +
+            '<button type="button" class="btn btn-secondary" id="new-user-cancel">Cancel</button>' +
+            '<button type="button" class="btn btn-primary" id="new-user-save">Create</button>' +
+            '</div>';
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        document.getElementById('new-username').focus();
+
+        document.getElementById('new-user-save').addEventListener('click', function () {
+            var username = document.getElementById('new-username').value.trim();
+            var password = document.getElementById('new-password').value;
+            var role = document.getElementById('new-role').value;
+            var errorEl = document.getElementById('new-user-error');
+            errorEl.style.display = 'none';
+
+            if (!username) { document.getElementById('new-username').focus(); return; }
+            if (!password) { document.getElementById('new-password').focus(); return; }
+
+            api('POST', '/api/users.py', { username: username, password: password, role: role }).then(function (resp) {
+                if (resp.success) {
+                    overlay.remove();
+                    loadUserList();
+                } else {
+                    errorEl.textContent = resp.error || 'Failed to create user';
+                    errorEl.style.display = 'block';
+                }
+            }).catch(function () {
+                errorEl.textContent = 'Network error';
+                errorEl.style.display = 'block';
+            });
+        });
+
+        document.getElementById('new-user-cancel').addEventListener('click', function () {
+            overlay.remove();
+        });
+
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) overlay.remove();
+        });
+    }
+
     // ---- Logout ----
     function initLogout() {
         document.addEventListener('click', function (e) {
@@ -1409,6 +1560,7 @@
         else if (page === 'complications') initComplications();
         else if (page === 'complication-edit') initComplicationEdit();
         else if (page === 'flash') initFlash();
+        else if (page === 'users') initUsers();
         // editor page is handled by editor.js
     });
 })();

@@ -100,6 +100,33 @@ def load_users():
         return json.load(f)
 
 
+def save_users(users):
+    """Write users list back to JSON file."""
+    with open(USERS_FILE, 'w') as f:
+        json.dump(users, f, indent=4)
+
+
+def get_user_role(username):
+    """Return role for username ('admin' or 'user'). Defaults to 'user'."""
+    users = load_users()
+    for u in users:
+        if u.get('username') == username:
+            return u.get('role', 'user')
+    return 'user'
+
+
+def require_admin():
+    """Check auth + admin role; 403 if not admin."""
+    user = require_auth()
+    role = get_user_role(user)
+    if role != 'admin':
+        print('Content-Type: application/json')
+        print()
+        print(json.dumps({'success': False, 'error': 'Admin access required'}))
+        raise SystemExit(0)
+    return user
+
+
 def set_cookie_header(value, max_age=None):
     """Return Set-Cookie header string."""
     if max_age is None:

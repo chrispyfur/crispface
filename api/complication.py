@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 import sys, os, json, urllib.parse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
-from auth import require_auth
+from auth import require_auth, require_admin
 from store import get_type, save_type, delete_type, get_type_script
 
-user = require_auth()
 method = os.environ.get('REQUEST_METHOD', 'GET')
+if method in ('POST', 'DELETE'):
+    require_admin()
+else:
+    require_auth()
 qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
 type_id = qs.get('id', [''])[0]
 
