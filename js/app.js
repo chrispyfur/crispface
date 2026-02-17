@@ -192,6 +192,19 @@
     // ---- Faces page ----
     function initFaces() {
         requireAuth(function () {
+            // View toggle
+            var toggleBtn = document.getElementById('btn-view-toggle');
+            var viewMode = localStorage.getItem('crispface_faces_view') || 'grid';
+            toggleBtn.textContent = viewMode === 'list' ? 'Grid' : 'List';
+
+            toggleBtn.addEventListener('click', function () {
+                viewMode = viewMode === 'grid' ? 'list' : 'grid';
+                localStorage.setItem('crispface_faces_view', viewMode);
+                var container = document.getElementById('face-grid');
+                container.className = viewMode === 'list' ? 'face-list' : 'face-grid';
+                toggleBtn.textContent = viewMode === 'list' ? 'Grid' : 'List';
+            });
+
             loadFaceList();
 
             document.getElementById('btn-new-face').addEventListener('click', function () {
@@ -264,24 +277,31 @@
             }
 
             empty.style.display = 'none';
-            grid.style.display = 'grid';
+            var viewMode = localStorage.getItem('crispface_faces_view') || 'grid';
+            grid.className = viewMode === 'list' ? 'face-list' : 'face-grid';
+            grid.style.display = '';
             grid.innerHTML = '';
 
             for (var k = 0; k < faces.length; k++) {
                 grid.appendChild(createFaceCard(faces[k], watchId));
             }
+
+            initFaceDragDrop(grid, watchId);
         });
     }
 
     function createFaceCard(face, watchId) {
         var card = document.createElement('div');
         card.className = 'face-card';
+        card.setAttribute('draggable', 'true');
+        card.setAttribute('data-face-id', face.id);
 
         var compCount = (face.complications || []).length;
         var editorHref = BASE_URL + '/editor.html?id=' + escHtml(face.id);
         if (watchId) editorHref += '&watch=' + escHtml(watchId);
 
         card.innerHTML =
+            '<span class="drag-handle" title="Drag to reorder">&#9776;</span>' +
             '<h3>' + escHtml(face.name) + '</h3>' +
             '<p class="face-meta">' + escHtml(face.slug) + ' &middot; ' +
             compCount + ' complication' + (compCount !== 1 ? 's' : '') + '</p>' +
@@ -300,6 +320,69 @@
         });
 
         return card;
+    }
+
+    function initFaceDragDrop(container, watchId) {
+        var cards = container.querySelectorAll('.face-card');
+        var dragSrcEl = null;
+
+        for (var i = 0; i < cards.length; i++) {
+            (function (card) {
+                card.addEventListener('dragstart', function (e) {
+                    dragSrcEl = card;
+                    card.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', card.getAttribute('data-face-id'));
+                });
+
+                card.addEventListener('dragend', function () {
+                    card.classList.remove('dragging');
+                    var all = container.querySelectorAll('.face-card');
+                    for (var j = 0; j < all.length; j++) {
+                        all[j].classList.remove('drag-over');
+                    }
+                });
+
+                card.addEventListener('dragover', function (e) {
+                    if (dragSrcEl === card) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    card.classList.add('drag-over');
+                });
+
+                card.addEventListener('dragleave', function () {
+                    card.classList.remove('drag-over');
+                });
+
+                card.addEventListener('drop', function (e) {
+                    e.preventDefault();
+                    card.classList.remove('drag-over');
+                    if (!dragSrcEl || dragSrcEl === card) return;
+
+                    var all = Array.prototype.slice.call(container.children);
+                    var srcIdx = all.indexOf(dragSrcEl);
+                    var dstIdx = all.indexOf(card);
+
+                    if (srcIdx < dstIdx) {
+                        container.insertBefore(dragSrcEl, card.nextSibling);
+                    } else {
+                        container.insertBefore(dragSrcEl, card);
+                    }
+
+                    saveFaceOrder(watchId);
+                });
+            })(cards[i]);
+        }
+    }
+
+    function saveFaceOrder(watchId) {
+        var container = document.getElementById('face-grid');
+        var cards = container.querySelectorAll('.face-card[data-face-id]');
+        var newOrder = [];
+        for (var i = 0; i < cards.length; i++) {
+            newOrder.push(cards[i].getAttribute('data-face-id'));
+        }
+        api('POST', '/api/watch.py?id=' + watchId, { face_ids: newOrder });
     }
 
     // ---- Complications list page ----

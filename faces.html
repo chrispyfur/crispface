@@ -29,7 +29,10 @@
     <main class="main-content">
         <div class="page-header">
             <h1>Faces</h1>
-            <button type="button" class="btn btn-primary" id="btn-new-face">New Face</button>
+            <div class="page-header-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="btn-view-toggle">List</button>
+                <button type="button" class="btn btn-primary" id="btn-new-face">New Face</button>
+            </div>
         </div>
         <div id="empty-state" class="empty-state" style="display:none;">
             <p>No faces yet. Create your first watch face to get started.</p>
@@ -37,6 +40,6 @@
         <div id="face-grid" class="face-grid"></div>
     </main>
 </div>
-<script src="/crispface/js/app.js?v=3"></script>
+<script src="/crispface/js/app.js?v=4"></script>
 </body>
 </html>
