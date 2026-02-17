@@ -347,7 +347,7 @@ private:
             }
             WiFi.begin(knownSSIDs[0], knownPasses[0]);
             int attempts = 0;
-            while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+            while (WiFi.status() != WL_CONNECTED && attempts < 20) {
                 delay(500);
                 attempts++;
             }
@@ -399,7 +399,7 @@ private:
                     }
                     WiFi.begin(knownSSIDs[k], knownPasses[k]);
                     int attempts = 0;
-                    while (WiFi.status() != WL_CONNECTED && attempts < 40) {
+                    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
                         delay(500);
                         attempts++;
                     }
