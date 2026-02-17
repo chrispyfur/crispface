@@ -732,6 +732,7 @@ private:
         bool isStale = !isLocal && stale > 0 && cfLastSync > 0 && (now - cfLastSync) > stale;
 
         const GFXfont* font = getFont(ff, sz, bold);
+        const GFXfont* boldFont = bold ? nullptr : getFont(ff, sz, true);
         uint16_t color = (strcmp(col, "white") == 0) ? GxEPD_WHITE : GxEPD_BLACK;
 
         // Draw border if configured
@@ -783,7 +784,7 @@ private:
         if (isStale) {
             drawItalic(val, tx, ty, tw, th, al, font, color);
         } else {
-            drawAligned(val, tx, ty, tw, th, al, font, color);
+            drawAligned(val, tx, ty, tw, th, al, font, color, boldFont);
         }
     }
 
@@ -1023,7 +1024,8 @@ private:
     // ---- Draw multi-line aligned text ----
 
     void drawAligned(const char* text, int bx, int by, int bw, int bh,
-                     const char* align, const GFXfont* font, uint16_t color) {
+                     const char* align, const GFXfont* font, uint16_t color,
+                     const GFXfont* boldFont = nullptr) {
         display.setFont(font);
 
         int16_t tx, ty;
@@ -1043,17 +1045,24 @@ private:
                                    : str.substring(idx, nl);
             idx = (nl < 0) ? str.length() + 1 : nl + 1;
 
+            // Check for bold marker byte (\x03 = render this line in bold)
+            bool useBold = false;
+            const char* linePtr = line.c_str();
+            if ((uint8_t)linePtr[0] == 0x03) { useBold = true; linePtr++; }
+
             // Check for circle marker bytes (all-day event indicators)
             bool drawFilledCircle = false;
             bool drawOpenCircle = false;
-            const char* linePtr = line.c_str();
             if ((uint8_t)linePtr[0] == 0x01) { drawFilledCircle = true; linePtr++; }
             else if ((uint8_t)linePtr[0] == 0x02) { drawOpenCircle = true; linePtr++; }
             if ((drawFilledCircle || drawOpenCircle) && linePtr[0] == ' ') linePtr++;
 
-            // Use linePtr (marker stripped) for measurement
-            const char* measStr = (drawFilledCircle || drawOpenCircle) ? linePtr : line.c_str();
-            display.getTextBounds(measStr, 0, 0, &tx, &ty, &tw, &th);
+            // Select font for this line (bold variant if marked and available)
+            const GFXfont* lineFont = (useBold && boldFont) ? boldFont : font;
+            display.setFont(lineFont);
+
+            // Use linePtr (markers stripped) for measurement
+            display.getTextBounds(linePtr, 0, 0, &tx, &ty, &tw, &th);
 
             // Account for circle width in alignment
             int circleW = 0;
@@ -1082,14 +1091,13 @@ private:
             }
 
             // Render glyph-by-glyph with pixel clipping to bounds
-            int lineLen = (drawFilledCircle || drawOpenCircle) ? (int)strlen(linePtr) : (int)line.length();
-            const char* renderStr = (drawFilledCircle || drawOpenCircle) ? linePtr : line.c_str();
+            int lineLen = (int)strlen(linePtr);
             for (int i = 0; i < lineLen; i++) {
-                uint8_t c = (uint8_t)renderStr[i];
-                if (c < font->first || c > font->last) continue;
+                uint8_t c = (uint8_t)linePtr[i];
+                if (c < lineFont->first || c > lineFont->last) continue;
 
-                GFXglyph *gl = &font->glyph[c - font->first];
-                uint8_t  *bm = font->bitmap;
+                GFXglyph *gl = &lineFont->glyph[c - lineFont->first];
+                uint8_t  *bm = lineFont->bitmap;
                 uint16_t  bo = gl->bitmapOffset;
                 uint8_t   gw = gl->width;
                 uint8_t   gh = gl->height;
@@ -1113,6 +1121,8 @@ private:
                 }
                 penX += gl->xAdvance;
             }
+            // Restore base font for next line's metrics consistency
+            display.setFont(font);
             firstLine = false;
             curY += lineH;
         }

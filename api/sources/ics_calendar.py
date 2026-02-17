@@ -152,7 +152,7 @@ def format_events(events, detail, max_chars):
 
     All-day events get a filled circle prefix, timed events get HH:MM.
     Lines are truncated with ... if they exceed max_chars.
-    Bold-flagged events have their summary UPPERCASED.
+    Bold-flagged events are prefixed with \\x03 (bold marker byte).
     Detail levels:
       title    - prefix + title
       location - prefix + title + @ location
@@ -161,10 +161,7 @@ def format_events(events, detail, max_chars):
     lines = []
     for ev in events:
         subject = ev.get('summary', 'No title')
-
-        # Bold feeds: UPPERCASE the summary
-        if ev.get('_bold'):
-            subject = subject.upper()
+        lineBold = bool(ev.get('_bold'))
 
         # Prefix: all-day gets * (busy) or o (free), timed gets HH:MM
         if ev.get('all_day'):
@@ -182,6 +179,10 @@ def format_events(events, detail, max_chars):
 
         line = truncate(line, max_chars)
 
+        # Bold marker: \x03 prefix tells firmware/editor to use bold font
+        if lineBold:
+            line = '\x03' + line
+
         if detail == 'full':
             desc = ev.get('description', '')
             if desc:
@@ -189,7 +190,10 @@ def format_events(events, detail, max_chars):
                 if len(desc) > 60:
                     snippet += '...'
                 lines.append(line)
-                lines.append(truncate('  ' + snippet, max_chars))
+                desc_line = truncate('  ' + snippet, max_chars)
+                if lineBold:
+                    desc_line = '\x03' + desc_line
+                lines.append(desc_line)
                 continue
 
         lines.append(line)

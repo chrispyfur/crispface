@@ -638,7 +638,7 @@
                 '<input type="text" id="feed-name" value="' + escHtml(feed ? feed.name : '') + '" placeholder="e.g. Work" /></div>' +
                 '<div class="form-group"><label for="feed-url">Feed URL</label>' +
                 '<input type="text" id="feed-url" value="' + escHtml(feed ? feed.url : '') + '" placeholder="https://..." /></div>' +
-                '<div class="form-group"><label><input type="checkbox" id="feed-bold"' + (feed && feed.bold ? ' checked' : '') + ' /> Bold (UPPERCASE events)</label></div>' +
+                '<div class="form-group"><label><input type="checkbox" id="feed-bold"' + (feed && feed.bold ? ' checked' : '') + ' /> Bold</label></div>' +
                 '<div class="form-group"><label><input type="checkbox" id="feed-alert"' + (feed && feed.alert ? ' checked' : '') + ' /> Alert before events</label></div>' +
                 '<div class="form-group"><label><input type="checkbox" id="feed-insistent"' + (feed && feed.insistent ? ' checked' : '') + ' /> Insistent alert</label></div>' +
                 '<div class="prop-feed-modal-actions">' +

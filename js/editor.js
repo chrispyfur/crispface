@@ -451,9 +451,18 @@
                     for (var li = 0; li < lines.length; li++) {
                         if (curY - ascent >= iy + ih) break;
                         var lineText = lines[li];
+
+                        // Bold marker: \x03 prefix means render this line in bold
+                        var lineBold = false;
+                        if (lineText.charCodeAt(0) === 3) { lineBold = true; lineText = lineText.substring(1); }
+
                         var circleType = 0; // 0=none, 1=filled, 2=open
                         if (lineText.charCodeAt(0) === 1) { circleType = 1; lineText = lineText.substring(1).trimStart(); }
                         else if (lineText.charCodeAt(0) === 2) { circleType = 2; lineText = lineText.substring(1).trimStart(); }
+
+                        // Switch font weight for bold-marked lines
+                        var lineWeight = (content.bold || lineBold) ? 'bold ' : weight;
+                        ctx.font = lineWeight + gfx.th + 'px ' + cfFont;
 
                         var circleW = 0;
                         if (circleType) {
@@ -483,6 +492,8 @@
                         ctx.fillText(lineText, curX, curY);
                         curY += lineH;
                     }
+                    // Restore base font after line loop
+                    ctx.font = weight + gfx.th + 'px ' + cfFont;
                     ctx.restore();
                 }
             });
