@@ -9,6 +9,7 @@
 #define CRISPFACE_FACES_DIR  "/faces"
 #define CRISPFACE_HTTP_TIMEOUT 15000
 #define CRISPFACE_GMT_OFFSET 0
+#define CRISPFACE_BUILD_EPOCH 0
 
 // WiFi networks — build_firmware.php injects per-watch values at build time.
 // Firmware scans available networks and connects to the strongest known one.

@@ -49,6 +49,25 @@ public:
             return;
         }
 
+        // If RTC time looks unset, seed it from build epoch
+        #if CRISPFACE_BUILD_EPOCH > 0
+        RTC.read(currentTime);
+        if (currentTime.Year + 1970 < 2026) {
+            time_t epoch = CRISPFACE_BUILD_EPOCH + (CRISPFACE_GMT_OFFSET * 3600);
+            struct tm *bt = localtime(&epoch);
+            tmElements_t tm;
+            tm.Year   = bt->tm_year + 1900 - 1970;
+            tm.Month  = bt->tm_mon + 1;
+            tm.Day    = bt->tm_mday;
+            tm.Hour   = bt->tm_hour;
+            tm.Minute = bt->tm_min;
+            tm.Second = bt->tm_sec;
+            tm.Wday   = bt->tm_wday + 1;
+            RTC.set(tm);
+            RTC.read(currentTime);
+        }
+        #endif
+
         // If RTC was lost (e.g. hard crash), check SPIFFS for cached faces
         if (cfFaceCount == 0) {
             for (int i = 0; i < 20; i++) {

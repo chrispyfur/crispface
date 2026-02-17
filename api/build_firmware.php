@@ -108,6 +108,13 @@ if ($watchId && $env === 'watchy') {
             $config
         );
 
+        // Inject build epoch (Unix timestamp) so firmware can seed RTC on first boot
+        $config = preg_replace(
+            '/#define\s+CRISPFACE_BUILD_EPOCH\s+\d+/',
+            '#define CRISPFACE_BUILD_EPOCH ' . time(),
+            $config
+        );
+
         // Inject WiFi networks
         $networks = $watch['wifi_networks'] ?? [];
         if (!empty($networks)) {
