@@ -225,6 +225,9 @@ def save_cache(cache_file, ics_text):
 
 def fetch_ics(url):
     """Fetch ICS text from URL with caching."""
+    # webcal:// is just https:// with a different scheme
+    if url.startswith('webcal://'):
+        url = 'https://' + url[9:]
     ics_text, cache_file = get_cached(url)
     if ics_text:
         return ics_text
