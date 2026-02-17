@@ -22,7 +22,8 @@ elif method == 'POST':
     name = str(body.get('name', 'Untitled Face')).strip() or 'Untitled Face'
 
     if dup_from:
-        face = duplicate_face(dup_from, name, user)
+        watch_id = body.get('watch_id', '').strip() or None
+        face = duplicate_face(dup_from, name, user, watch_id=watch_id)
         if not face:
             print('Content-Type: application/json')
             print()

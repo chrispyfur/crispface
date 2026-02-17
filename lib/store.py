@@ -120,7 +120,7 @@ def delete_face(face_id, user):
     return True
 
 
-def duplicate_face(source_id, new_name, user):
+def duplicate_face(source_id, new_name, user, watch_id=None):
     """Duplicate a face with all complications. Insert after the original."""
     import copy
     source = get_face(source_id, user)
@@ -146,6 +146,21 @@ def duplicate_face(source_id, new_name, user):
     new_face['sort_order'] = src_order + 1
 
     _write_face(new_id, new_face, user)
+
+    # Add new face to watch's face_ids right after the source face
+    if watch_id:
+        watch = get_watch(watch_id, user)
+        if watch:
+            face_ids = watch.get('face_ids', [])
+            try:
+                idx = face_ids.index(source_id)
+                face_ids.insert(idx + 1, new_id)
+            except ValueError:
+                face_ids.append(new_id)
+            watch['face_ids'] = face_ids
+            watch['updated_at'] = now
+            _write_watch(watch_id, watch, user)
+
     return new_face
 
 

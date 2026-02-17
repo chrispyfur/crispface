@@ -343,8 +343,8 @@
             '<div class="form-group"><label for="dup-name">Name</label>' +
             '<input type="text" id="dup-name" value="' + escHtml(face.name + ' (copy)') + '" /></div>' +
             '<div class="dup-modal-actions">' +
-            '<button type="button" class="btn btn-primary" id="dup-save">Duplicate</button>' +
             '<button type="button" class="btn btn-secondary" id="dup-cancel">Cancel</button>' +
+            '<button type="button" class="btn btn-primary" id="dup-save">Duplicate</button>' +
             '</div>';
 
         overlay.appendChild(card);
@@ -358,7 +358,8 @@
             var name = nameInput.value.trim();
             if (!name) { nameInput.focus(); return; }
             overlay.remove();
-            api('POST', '/api/faces.py', { duplicate_from: face.id, name: name }).then(function (resp) {
+            var watchId = window.CRISPFACE.currentWatchId;
+            api('POST', '/api/faces.py', { duplicate_from: face.id, name: name, watch_id: watchId }).then(function (resp) {
                 if (resp.success) {
                     loadFaceList();
                 }
