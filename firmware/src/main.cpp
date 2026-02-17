@@ -36,6 +36,7 @@ RTC_DATA_ATTR char    cfNotifText[60]  = "";
 class CrispFace : public Watchy {
 public:
     String cfDebugWifi; // WiFi debug log, populated by cfConnectWiFi()
+    bool cfDismissing = false; // skip sync/alerts during notification dismiss redraw
 
     CrispFace(const watchySettings &s) : Watchy(s) {}
 
@@ -83,6 +84,14 @@ public:
         // Insistent notification: buzz first (privacy), then show text on button press
         if (cfNotifActive && cfNotifInsistent) {
             insistentBuzzLoop();       // buzzes until button press or timeout
+            // Wait for button release to prevent immediate re-wake from held button
+            while (digitalRead(UP_BTN_PIN) == LOW ||
+                   digitalRead(DOWN_BTN_PIN) == LOW ||
+                   digitalRead(BACK_BTN_PIN) == LOW ||
+                   digitalRead(MENU_BTN_PIN) == LOW) {
+                delay(50);
+            }
+            delay(100); // debounce
             cfNotifInsistent = false;  // stop buzzing phase, keep notif active
             renderNotification();      // now reveal the notification text
             return;                    // next button press dismisses via handleButtonPress
@@ -90,37 +99,49 @@ public:
 
         int now = makeTime(currentTime);
 
-        // Check if sync needed
-        if (cfNeedsSync || (cfLastSync > 0 && (now - cfLastSync) > cfSyncInterval)
-            || cfFaceCount == 0) {
-            syncFromServer();
-            cfNeedsSync = false;
-            // Re-read time after sync (NTP may have adjusted clock)
-            RTC.read(currentTime);
-            now = makeTime(currentTime);
-        }
+        // Skip sync and alert checks when redrawing after notification dismiss
+        if (!cfDismissing) {
+            // Check if sync needed
+            if (cfNeedsSync || (cfLastSync > 0 && (now - cfLastSync) > cfSyncInterval)
+                || cfFaceCount == 0) {
+                syncFromServer();
+                cfNeedsSync = false;
+                // Re-read time after sync (NTP may have adjusted clock)
+                RTC.read(currentTime);
+                now = makeTime(currentTime);
+            }
 
-        // Check alerts (90s window — watch wakes every 60s, buffer without overlap)
-        for (int i = 0; i < cfAlertCount; i++) {
-            if (cfAlerts[i].fired) continue;
-            int diff = cfAlerts[i].eventTime - now;
-            if (diff >= 0 && diff <= 90) {
-                cfAlerts[i].fired = true;
-                if (cfAlerts[i].buzzCount == 0) {
-                    // Insistent: buzz first (privacy), reveal text on button press
-                    cfNotifActive = true;
-                    cfNotifPreAlert = cfAlerts[i].preAlert;
-                    strncpy(cfNotifText, cfAlerts[i].text, 59);
-                    cfNotifText[59] = '\0';
-                    insistentBuzzLoop();
-                    renderNotification();
-                    return;
-                } else {
-                    // Regular: buzz N times (1 for pre-alert, 3 for event)
-                    vibMotor(75, cfAlerts[i].buzzCount * 2);
+            // Check alerts (90s window — watch wakes every 60s, buffer without overlap)
+            for (int i = 0; i < cfAlertCount; i++) {
+                if (cfAlerts[i].fired) continue;
+                int diff = cfAlerts[i].eventTime - now;
+                if (diff >= 0 && diff <= 90) {
+                    cfAlerts[i].fired = true;
+                    if (cfAlerts[i].buzzCount == 0) {
+                        // Insistent: buzz first (privacy), reveal text on button press
+                        cfNotifActive = true;
+                        cfNotifPreAlert = cfAlerts[i].preAlert;
+                        strncpy(cfNotifText, cfAlerts[i].text, 59);
+                        cfNotifText[59] = '\0';
+                        insistentBuzzLoop();
+                        // Wait for button release to prevent immediate re-wake
+                        while (digitalRead(UP_BTN_PIN) == LOW ||
+                               digitalRead(DOWN_BTN_PIN) == LOW ||
+                               digitalRead(BACK_BTN_PIN) == LOW ||
+                               digitalRead(MENU_BTN_PIN) == LOW) {
+                            delay(50);
+                        }
+                        delay(100); // debounce
+                        renderNotification();
+                        return;
+                    } else {
+                        // Regular: buzz N times (1 for pre-alert, 3 for event)
+                        vibMotor(75, cfAlerts[i].buzzCount * 2);
+                    }
                 }
             }
         }
+        cfDismissing = false;
 
         // Render current face from SPIFFS
         if (cfFaceCount > 0) {
@@ -150,6 +171,7 @@ public:
             cfNotifInsistent = false;
             cfNotifPreAlert = false;
             cfNotifText[0] = '\0';
+            cfDismissing = true; // skip sync/alerts in the redraw
             RTC.read(currentTime);
             showWatchFace(true);
             return;
@@ -234,9 +256,6 @@ private:
         display.getTextBounds(hint, 0, 0, &tx, &ty, &tw, &th);
         display.setCursor((200 - (int)tw) / 2, 170);
         display.print(hint);
-
-        // Push to display immediately (buzz loop blocks before showWatchFace can flush)
-        display.display(true);
     }
 
     // Buzz until any button is pressed or timeout. Does NOT dismiss the
