@@ -311,7 +311,7 @@
         card.innerHTML =
             '<span class="drag-handle" title="Drag to reorder">&#9776;</span>' +
             '<h3>' + escHtml(face.name) + '</h3>' +
-            '<p class="face-meta">' + escHtml(face.slug) + ' &middot; ' +
+            '<p class="face-meta">' +
             compCount + ' complication' + (compCount !== 1 ? 's' : '') + '</p>' +
             '<div class="face-actions">' +
             '<a href="' + editorHref + '" class="btn btn-primary btn-sm">Edit</a>' +
