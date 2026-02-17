@@ -120,6 +120,35 @@ def delete_face(face_id, user):
     return True
 
 
+def duplicate_face(source_id, new_name, user):
+    """Duplicate a face with all complications. Insert after the original."""
+    import copy
+    source = get_face(source_id, user)
+    if not source:
+        return None
+
+    new_id = _generate_id()
+    now = _now_iso()
+    new_face = copy.deepcopy(source)
+    new_face['id'] = new_id
+    new_face['name'] = new_name
+    new_face['slug'] = _slugify(new_name)
+    new_face['created_at'] = now
+    new_face['updated_at'] = now
+
+    # Insert after original: bump sort_order of all faces after the source
+    src_order = source.get('sort_order', 0)
+    all_faces = get_all_faces(user)
+    for f in all_faces:
+        if f.get('sort_order', 0) > src_order:
+            f['sort_order'] = f['sort_order'] + 1
+            _write_face(f['id'], f, user)
+    new_face['sort_order'] = src_order + 1
+
+    _write_face(new_id, new_face, user)
+    return new_face
+
+
 def _validate_complication(c):
     """Validate and sanitise a single complication dict."""
     cid = re.sub(r'[^a-zA-Z0-9_-]', '', str(c.get('complication_id', '')))

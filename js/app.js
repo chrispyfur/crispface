@@ -307,6 +307,7 @@
             compCount + ' complication' + (compCount !== 1 ? 's' : '') + '</p>' +
             '<div class="face-actions">' +
             '<a href="' + editorHref + '" class="btn btn-primary btn-sm">Edit</a>' +
+            '<button type="button" class="btn btn-secondary btn-sm" data-dup="' + escHtml(face.id) + '">Duplicate</button>' +
             '<button type="button" class="btn btn-danger btn-sm" data-delete="' + escHtml(face.id) + '">Delete</button>' +
             '</div>';
 
@@ -319,7 +320,64 @@
             });
         });
 
+        card.querySelector('[data-dup]').addEventListener('click', function () {
+            showDuplicateModal(face);
+        });
+
         return card;
+    }
+
+    function showDuplicateModal(face) {
+        var existing = document.getElementById('dup-modal');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'dup-modal-overlay';
+        overlay.id = 'dup-modal';
+
+        var card = document.createElement('div');
+        card.className = 'dup-modal-card';
+        card.innerHTML =
+            '<h3>Duplicate Face</h3>' +
+            '<p>Creating a copy of <strong>' + escHtml(face.name) + '</strong></p>' +
+            '<div class="form-group"><label for="dup-name">Name</label>' +
+            '<input type="text" id="dup-name" value="' + escHtml(face.name + ' (copy)') + '" /></div>' +
+            '<div class="dup-modal-actions">' +
+            '<button type="button" class="btn btn-primary" id="dup-save">Duplicate</button>' +
+            '<button type="button" class="btn btn-secondary" id="dup-cancel">Cancel</button>' +
+            '</div>';
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        var nameInput = document.getElementById('dup-name');
+        nameInput.focus();
+        nameInput.select();
+
+        document.getElementById('dup-save').addEventListener('click', function () {
+            var name = nameInput.value.trim();
+            if (!name) { nameInput.focus(); return; }
+            overlay.remove();
+            api('POST', '/api/faces.py', { duplicate_from: face.id, name: name }).then(function (resp) {
+                if (resp.success) {
+                    loadFaceList();
+                }
+            });
+        });
+
+        nameInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                document.getElementById('dup-save').click();
+            }
+        });
+
+        document.getElementById('dup-cancel').addEventListener('click', function () {
+            overlay.remove();
+        });
+
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) overlay.remove();
+        });
     }
 
     function initFaceDragDrop(container, watchId) {

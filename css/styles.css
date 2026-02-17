@@ -309,6 +309,48 @@ a:hover {
     gap: 8px;
 }
 
+/* Duplicate modal */
+.dup-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.dup-modal-card {
+    background: #fff;
+    border-radius: 8px;
+    padding: 24px;
+    width: 380px;
+    max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.dup-modal-card h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--gray-dark);
+}
+
+.dup-modal-card p {
+    font-size: 13px;
+    color: var(--gray-medium);
+    margin-bottom: 16px;
+}
+
+.dup-modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
 /* Page header actions */
 .page-header-actions {
     display: flex;

@@ -2,7 +2,7 @@
 import sys, os, json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 from auth import require_auth
-from store import get_all_faces, create_face
+from store import get_all_faces, create_face, duplicate_face
 
 user = require_auth()
 method = os.environ.get('REQUEST_METHOD', 'GET')
@@ -18,8 +18,19 @@ elif method == 'POST':
         body = json.loads(sys.stdin.read())
     except Exception:
         body = {}
+    dup_from = body.get('duplicate_from', '').strip()
     name = str(body.get('name', 'Untitled Face')).strip() or 'Untitled Face'
-    face = create_face(name, user)
+
+    if dup_from:
+        face = duplicate_face(dup_from, name, user)
+        if not face:
+            print('Content-Type: application/json')
+            print()
+            print(json.dumps({'success': False, 'error': 'Source face not found'}))
+            sys.exit(0)
+    else:
+        face = create_face(name, user)
+
     print('Content-Type: application/json')
     print()
     print(json.dumps({'success': True, 'face': face}))
