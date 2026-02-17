@@ -264,8 +264,15 @@ for feed in feeds:
     if not url:
         continue
     bold = feed.get('bold', False)
-    feed_alert = feed.get('alert', False)
-    feed_insistent = feed.get('insistent', False)
+    alert_mode = feed.get('alert_mode', '')
+    # Backwards compat: old feeds with separate alert/insistent fields
+    if not alert_mode:
+        if feed.get('insistent'):
+            alert_mode = 'insistent'
+        elif feed.get('alert'):
+            alert_mode = 'gentle'
+    feed_alert = alert_mode in ('gentle', 'insistent')
+    feed_insistent = alert_mode == 'insistent'
 
     if feed_alert or feed_insistent:
         any_alerts = True

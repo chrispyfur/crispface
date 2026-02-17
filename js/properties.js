@@ -118,7 +118,9 @@
                             html += '<div class="prop-feed-item" data-feed-idx="' + fi + '">';
                             html += '<span class="prop-feed-name">' + escHtml(feedsList[fi].name || 'Unnamed') + '</span>';
                             if (feedsList[fi].bold) html += '<span class="prop-feed-bold-badge">BOLD</span>';
-                            if (feedsList[fi].alert) html += '<span class="prop-feed-alert-badge">ALERT</span>';
+                            var feedAlertMode = feedsList[fi].alert_mode || (feedsList[fi].insistent ? 'insistent' : (feedsList[fi].alert ? 'gentle' : ''));
+                            if (feedAlertMode === 'gentle') html += '<span class="prop-feed-alert-badge">ALERT</span>';
+                            if (feedAlertMode === 'insistent') html += '<span class="prop-feed-alert-badge">ALERT!</span>';
                             html += '<button type="button" class="prop-feed-edit btn btn-sm btn-secondary" data-feed-idx="' + fi + '">Edit</button>';
                             html += '<button type="button" class="prop-feed-delete btn btn-sm btn-danger" data-feed-idx="' + fi + '">Del</button>';
                             html += '</div>';
@@ -630,6 +632,8 @@
             overlay.className = 'prop-feed-modal';
             overlay.id = 'prop-feed-modal';
 
+            var feedAlertSel = feed ? (feed.alert_mode || (feed.insistent ? 'insistent' : (feed.alert ? 'gentle' : 'none'))) : 'none';
+
             var card = document.createElement('div');
             card.className = 'prop-feed-modal-inner';
             card.innerHTML =
@@ -639,8 +643,12 @@
                 '<div class="form-group"><label for="feed-url">Feed URL</label>' +
                 '<input type="text" id="feed-url" value="' + escHtml(feed ? feed.url : '') + '" placeholder="https://..." /></div>' +
                 '<div class="form-group"><label><input type="checkbox" id="feed-bold"' + (feed && feed.bold ? ' checked' : '') + ' /> Bold</label></div>' +
-                '<div class="form-group"><label><input type="checkbox" id="feed-alert"' + (feed && feed.alert ? ' checked' : '') + ' /> Alert before events</label></div>' +
-                '<div class="form-group"><label><input type="checkbox" id="feed-insistent"' + (feed && feed.insistent ? ' checked' : '') + ' /> Insistent alert</label></div>' +
+                '<div class="form-group"><label for="feed-alert-mode">Alert</label>' +
+                '<select id="feed-alert-mode">' +
+                '<option value="none"' + (feedAlertSel === 'none' ? ' selected' : '') + '>None</option>' +
+                '<option value="gentle"' + (feedAlertSel === 'gentle' ? ' selected' : '') + '>Gentle</option>' +
+                '<option value="insistent"' + (feedAlertSel === 'insistent' ? ' selected' : '') + '>Insistent</option>' +
+                '</select></div>' +
                 '<div class="prop-feed-modal-actions">' +
                 '<button type="button" class="btn btn-primary" id="feed-save">Save</button>' +
                 '<button type="button" class="btn btn-secondary" id="feed-cancel">Cancel</button>' +
@@ -657,14 +665,12 @@
                 var url = document.getElementById('feed-url').value.trim();
                 if (url.indexOf('webcal://') === 0) url = 'https://' + url.substring(9);
                 var bold = document.getElementById('feed-bold').checked;
-                var alert = document.getElementById('feed-alert').checked;
-                var insistent = document.getElementById('feed-insistent').checked;
+                var alertMode = document.getElementById('feed-alert-mode').value;
                 if (!url) { document.getElementById('feed-url').focus(); return; }
                 if (!name) name = 'Calendar';
                 overlay.remove();
                 var feedData = { name: name, url: url, bold: bold };
-                if (alert) feedData.alert = true;
-                if (insistent) feedData.insistent = true;
+                if (alertMode !== 'none') feedData.alert_mode = alertMode;
                 onSave(feedData);
             });
 
