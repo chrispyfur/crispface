@@ -15,7 +15,61 @@ if not target_id:
     print(json.dumps({'success': False, 'error': 'Missing id parameter'}))
     sys.exit(0)
 
-if method == 'DELETE':
+if method == 'POST':
+    import bcrypt
+    try:
+        body = json.loads(sys.stdin.read())
+    except Exception:
+        body = {}
+
+    users = load_users()
+    target = None
+    for u in users:
+        if u.get('id') == target_id:
+            target = u
+            break
+
+    if not target:
+        print('Content-Type: application/json')
+        print()
+        print(json.dumps({'success': False, 'error': 'User not found'}))
+        sys.exit(0)
+
+    is_self = target.get('username') == admin_user
+
+    # Update role (admin can't change own role)
+    if 'role' in body:
+        if is_self:
+            print('Content-Type: application/json')
+            print()
+            print(json.dumps({'success': False, 'error': 'Cannot change your own role'}))
+            sys.exit(0)
+        new_role = str(body['role'])
+        if new_role not in ('admin', 'user'):
+            new_role = 'user'
+        target['role'] = new_role
+
+    # Update password
+    if body.get('password'):
+        new_password = str(body['password'])
+        if len(new_password) < 4:
+            print('Content-Type: application/json')
+            print()
+            print(json.dumps({'success': False, 'error': 'Password must be at least 4 characters'}))
+            sys.exit(0)
+        target['password_hash'] = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt(rounds=12)).decode()
+
+    save_users(users)
+
+    print('Content-Type: application/json')
+    print()
+    print(json.dumps({'success': True, 'user': {
+        'id': target.get('id'),
+        'username': target.get('username'),
+        'role': target.get('role', 'user')
+    }}))
+
+elif method == 'DELETE':
     users = load_users()
     target = None
     for u in users:

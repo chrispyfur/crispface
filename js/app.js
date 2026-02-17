@@ -1160,8 +1160,13 @@
             '<h3>' + escHtml(u.username) + '</h3>' +
             '<p class="face-meta">' + escHtml(roleLabel) + '</p>' +
             '<div class="face-actions">' +
+            '<button type="button" class="btn btn-secondary btn-sm" data-edit="' + escHtml(u.id) + '">Edit</button>' +
             (isSelf ? '' : '<button type="button" class="btn btn-danger btn-sm" data-delete="' + escHtml(u.id) + '">Delete</button>') +
             '</div>';
+
+        card.querySelector('[data-edit]').addEventListener('click', function () {
+            showEditUserModal(u);
+        });
 
         if (!isSelf) {
             card.querySelector('[data-delete]').addEventListener('click', function () {
@@ -1175,6 +1180,85 @@
         }
 
         return card;
+    }
+
+    function showEditUserModal(u) {
+        var existing = document.getElementById('edit-user-modal');
+        if (existing) existing.remove();
+
+        var isSelf = u.username === window.CRISPFACE.user;
+
+        var overlay = document.createElement('div');
+        overlay.className = 'dup-modal-overlay';
+        overlay.id = 'edit-user-modal';
+
+        var card = document.createElement('div');
+        card.className = 'dup-modal-card';
+        card.innerHTML =
+            '<h3>Edit User: ' + escHtml(u.username) + '</h3>' +
+            '<div class="form-group"><label for="edit-role">Role</label>' +
+            '<select id="edit-role"' + (isSelf ? ' disabled' : '') + '>' +
+            '<option value="user"' + (u.role !== 'admin' ? ' selected' : '') + '>User</option>' +
+            '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>Admin</option>' +
+            '</select>' +
+            (isSelf ? '<p class="form-hint">Cannot change your own role</p>' : '') +
+            '</div>' +
+            '<div class="form-group"><label for="edit-password">New Password</label>' +
+            '<input type="password" id="edit-password" placeholder="Leave blank to keep current" /></div>' +
+            '<p id="edit-user-error" style="color:#E53935;display:none;"></p>' +
+            '<div class="dup-modal-actions">' +
+            '<button type="button" class="btn btn-secondary" id="edit-user-cancel">Cancel</button>' +
+            '<button type="button" class="btn btn-primary" id="edit-user-save">Save</button>' +
+            '</div>';
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        document.getElementById('edit-user-save').addEventListener('click', function () {
+            var errorEl = document.getElementById('edit-user-error');
+            errorEl.style.display = 'none';
+
+            var body = {};
+            var roleSelect = document.getElementById('edit-role');
+            if (!isSelf && roleSelect.value !== u.role) {
+                body.role = roleSelect.value;
+            }
+            var password = document.getElementById('edit-password').value;
+            if (password) {
+                if (password.length < 4) {
+                    errorEl.textContent = 'Password must be at least 4 characters';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                body.password = password;
+            }
+
+            if (!body.role && !body.password) {
+                overlay.remove();
+                return;
+            }
+
+            api('POST', '/api/user.py?id=' + u.id, body).then(function (resp) {
+                if (resp.success) {
+                    overlay.remove();
+                    loadUserList();
+                } else {
+                    errorEl.textContent = resp.error || 'Failed to update user';
+                    errorEl.style.display = 'block';
+                }
+            }).catch(function () {
+                errorEl.textContent = 'Network error';
+                errorEl.style.display = 'block';
+            });
+        });
+
+        document.getElementById('edit-user-cancel').addEventListener('click', function () {
+            overlay.remove();
+        });
+
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) overlay.remove();
+        });
     }
 
     function showNewUserModal() {
@@ -1239,6 +1323,86 @@
         });
     }
 
+    // ---- Change Password (self-service, any user) ----
+    function showChangePasswordModal() {
+        var existing = document.getElementById('change-pw-modal');
+        if (existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.className = 'dup-modal-overlay';
+        overlay.id = 'change-pw-modal';
+
+        var card = document.createElement('div');
+        card.className = 'dup-modal-card';
+        card.innerHTML =
+            '<h3>Change Password</h3>' +
+            '<div class="form-group"><label for="pw-current">Current Password</label>' +
+            '<input type="password" id="pw-current" /></div>' +
+            '<div class="form-group"><label for="pw-new">New Password</label>' +
+            '<input type="password" id="pw-new" /></div>' +
+            '<div class="form-group"><label for="pw-confirm">Confirm New Password</label>' +
+            '<input type="password" id="pw-confirm" /></div>' +
+            '<p id="change-pw-error" style="color:#E53935;display:none;"></p>' +
+            '<div class="dup-modal-actions">' +
+            '<button type="button" class="btn btn-secondary" id="change-pw-cancel">Cancel</button>' +
+            '<button type="button" class="btn btn-primary" id="change-pw-save">Change</button>' +
+            '</div>';
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        document.getElementById('pw-current').focus();
+
+        document.getElementById('change-pw-save').addEventListener('click', function () {
+            var errorEl = document.getElementById('change-pw-error');
+            errorEl.style.display = 'none';
+
+            var current = document.getElementById('pw-current').value;
+            var newPw = document.getElementById('pw-new').value;
+            var confirm = document.getElementById('pw-confirm').value;
+
+            if (!current) {
+                errorEl.textContent = 'Current password is required';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (!newPw || newPw.length < 4) {
+                errorEl.textContent = 'New password must be at least 4 characters';
+                errorEl.style.display = 'block';
+                return;
+            }
+            if (newPw !== confirm) {
+                errorEl.textContent = 'New passwords do not match';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            api('POST', '/api/change_password.py', {
+                current_password: current,
+                new_password: newPw
+            }).then(function (resp) {
+                if (resp.success) {
+                    overlay.remove();
+                    alert('Password changed successfully');
+                } else {
+                    errorEl.textContent = resp.error || 'Failed to change password';
+                    errorEl.style.display = 'block';
+                }
+            }).catch(function () {
+                errorEl.textContent = 'Network error';
+                errorEl.style.display = 'block';
+            });
+        });
+
+        document.getElementById('change-pw-cancel').addEventListener('click', function () {
+            overlay.remove();
+        });
+
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) overlay.remove();
+        });
+    }
+
     // ---- Logout ----
     function initLogout() {
         document.addEventListener('click', function (e) {
@@ -1249,6 +1413,10 @@
                 }).catch(function () {
                     window.location.href = BASE_URL + '/index.html';
                 });
+            }
+            if (e.target && e.target.id === 'btn-change-password') {
+                e.preventDefault();
+                showChangePasswordModal();
             }
         });
     }

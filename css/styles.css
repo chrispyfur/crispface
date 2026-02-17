@@ -351,6 +351,12 @@ a:hover {
     margin-top: 16px;
 }
 
+.form-hint {
+    font-size: 12px;
+    color: var(--gray-medium);
+    margin-top: 4px;
+}
+
 /* Page header actions */
 .page-header-actions {
     display: flex;
