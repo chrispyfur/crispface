@@ -1,20 +1,20 @@
-# CrispFace Web Builder & Server Specification v0.4
+# CrispFace Web Builder & Server Specification v0.6
 
-The server-side platform for designing, managing, and serving watch faces to Watchy ESP32 devices.
+The server-side platform for designing, managing, and serving watch faces to Watchy ESP32-S3 devices.
 
 ---
 
 ## Overview
 
-The CrispFace web platform is the brain of the system. It provides a visual editor for building watch faces, manages device registrations, resolves dynamic data bindings, and serves face definitions to devices via a REST API.
+The CrispFace web platform is the brain of the system. PHP serves HTML pages, Python CGI scripts handle API endpoints (routed via `router.php`), and a Fabric.js canvas editor provides a 200x200 pixel-accurate face designer. All data is stored as flat-file JSON — no database required.
 
 ```
 ┌─────────────────┐         ┌─────────────┐
-│  CrispRain API  │ ◄─────► │  Web Admin  │
-│     (PHP)       │         │  (Builder)  │
+│  Python CGI API │ ◄─────► │  Web Editor  │
+│  (via PHP)      │         │  (Fabric.js) │
 └────────┬────────┘         └─────────────┘
          │
-         │ JSON over HTTP
+         │ JSON over HTTPS
          ▼
    Watchy Devices
 ```
@@ -22,7 +22,48 @@ The CrispFace web platform is the brain of the system. It provides a visual edit
 **Design Principles:**
 - Complexity belongs in the web builder, not firmware
 - The server resolves all dynamic data before sending to devices
-- Faces are defined as JSON - the shared contract between server and firmware
+- Faces are defined as JSON — the shared contract between server and firmware
+- Flat-file JSON storage, no MySQL
+- Multi-user with admin/user roles (no self-registration)
+
+---
+
+## Architecture
+
+### Request Flow
+
+1. Browser loads static HTML pages (served by Apache)
+2. JavaScript calls API endpoints at `/api/*.py`
+3. Apache routes `.py` requests to `router.php` (via RewriteRule)
+4. `router.php` executes the Python script as CGI, forwarding environment variables and stdin
+5. Python scripts use `lib/auth.py` for session/token auth and `lib/store.py` for data access
+
+### Storage
+
+All data lives in `data/` as flat-file JSON:
+
+```
+data/
+├── users.json                  # User accounts, password hashes, API tokens, roles
+├── complications/              # Complication type definitions (shared, admin-managed)
+│   ├── weather.json
+│   └── ics-calendar.json
+└── users/
+    ├── chris/                  # Per-user data
+    │   ├── faces/              # Face JSON files (one per face)
+    │   │   └── f65dc7a50fa31c67.json
+    │   └── watches/            # Watch JSON files (one per watch)
+    │       └── 8ed6a0db4ca82b36.json
+    └── admin/
+        ├── faces/
+        └── watches/
+```
+
+### Authentication
+
+- **Session cookies**: Signed HMAC-SHA256 cookies for web UI (1-hour expiry)
+- **Bearer tokens**: Pre-shared `cf_*` tokens for firmware API access
+- **Roles**: `admin` (full access) or `user` (own faces/watches only, read-only complication types)
 
 ---
 
@@ -30,501 +71,301 @@ The CrispFace web platform is the brain of the system. It provides a visual edit
 
 ### Face
 
-A face is a full-screen layout containing zero or more complications. Faces are created and edited in the web builder, stored in the database, and served to devices on sync.
+A face is a full-screen layout containing zero or more complications. Faces belong to a user and can be assigned to one or more watches.
 
 ```json
 {
-  "id": "daily-driver",
-  "name": "Daily Driver",
-  "background": "black",
-  "stale_seconds": 900,
-  "complications": [...],
-  "controls": {...}
+    "id": "f65dc7a50fa31c67",
+    "slug": "weekend-face",
+    "name": "Weekend Face",
+    "background": "black",
+    "complications": [...],
+    "sort_order": 1,
+    "created_at": "2026-02-12T...",
+    "updated_at": "2026-02-17T..."
 }
 ```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique identifier |
-| `name` | string | Human-readable name |
-| `background` | `"black"` \| `"white"` | Base fill color |
-| `stale_seconds` | int | Max age before forced refresh (0 = manual only) |
-| `complications` | array | List of complication instances |
-| `controls` | object | Button mapping overrides (optional) |
 
 ### Complication
 
-A complication is a rectangular widget positioned absolutely within the 200x200 display area.
+A complication is a rectangular text widget positioned absolutely within the 200x200 display area. Each complication references a complication type which provides its data source.
 
 ```json
 {
-  "type": "text",
-  "id": "time-main",
-  "x": 10,
-  "y": 80,
-  "w": 180,
-  "h": 60,
-  "stale_seconds": 60,
-  "content": {...}
+    "complication_id": "time",
+    "complication_type": "time",
+    "type": "text",
+    "x": 10, "y": 80, "w": 180, "h": 60,
+    "refresh_interval": 60,
+    "content": {
+        "value": "14:32",
+        "family": "sans-serif",
+        "size": 48,
+        "bold": false,
+        "align": "center",
+        "color": "white",
+        "source": "/crispface/api/sources/time.py"
+    },
+    "params": {"format": "HH:MM"},
+    "sort_order": 0
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | string | Complication type (see types below) |
-| `id` | string | Unique within face |
-| `x`, `y` | int | Top-left position (0-199) |
-| `w`, `h` | int | Width and height in pixels |
-| `stale_seconds` | int | Override face-level staleness (optional) |
-| `content` | object | Type-specific content payload |
+### Complication Type
 
----
-
-## Complication Types
-
-### `text`
-
-Renders text with optional formatting.
+A complication type is an admin-managed template that defines a data source (Python script) and configurable variables. Users select a type when adding a complication to a face, then configure its variables (e.g. city for weather, feeds for calendar).
 
 ```json
 {
-  "type": "text",
-  "content": {
-    "value": "14:32",
-    "font": "sans-24",
-    "align": "center",
-    "color": "white"
-  }
+    "id": "weather",
+    "name": "Weather",
+    "description": "Current weather conditions",
+    "script": "weather.py",
+    "variables": [
+        {"name": "city", "label": "City", "type": "text", "default": "Derby"}
+    ]
 }
 ```
 
-| Field | Values |
-|-------|--------|
-| `font` | `sans-16`, `sans-24`, `sans-48`, `mono-16` |
-| `align` | `left`, `center`, `right` |
-| `color` | `black`, `white` |
+The script runs as a CGI endpoint in `api/sources/` and returns `{"value": "..."}`.
 
-**Baked-in Fonts (3 total):**
-- `sans` - Clean sans-serif (sizes: 16, 24, 48)
-- `mono` - Monospace for data (size: 16)
-- `icons` - Icon glyphs (size: 24)
+### Watch
 
-### `bitmap`
-
-Renders a 1-bit bitmap image.
+A watch represents a physical Watchy device. It holds an ordered list of face IDs, WiFi network credentials (up to 5), and a timezone.
 
 ```json
 {
-  "type": "bitmap",
-  "content": {
-    "data": "base64-encoded-1bit-bitmap"
-  }
+    "id": "8ed6a0db4ca82b36",
+    "name": "Wrist Watch",
+    "face_ids": ["f65dc7a50fa31c67", "251de1bf052f2805"],
+    "wifi_networks": [
+        {"ssid": "HomeWifi", "password": "secret123"}
+    ],
+    "timezone": "Europe/London"
 }
 ```
-
-- Bitmap data is base64-encoded 1-bit packed pixels
-- Row-major, MSB first
-- Dimensions inferred from `w` and `h`
-- Web builder provides image converter and pixel editor
-
-### `progress`
-
-Horizontal or vertical progress bar.
-
-```json
-{
-  "type": "progress",
-  "content": {
-    "value": 0.75,
-    "direction": "horizontal",
-    "style": "filled"
-  }
-}
-```
-
-| Field | Values |
-|-------|--------|
-| `direction` | `horizontal`, `vertical` |
-| `style` | `filled`, `segmented` |
-
-### `qr`
-
-Renders a QR code.
-
-```json
-{
-  "type": "qr",
-  "content": {
-    "data": "https://example.com/link"
-  }
-}
-```
-
----
-
-## Data Bindings
-
-Complications can reference dynamic data via template syntax. The server is responsible for resolving server-side bindings before sending data to devices.
-
-### Server-Resolved Bindings
-
-These are resolved by the server at sync time:
-
-```json
-{
-  "type": "text",
-  "content": {
-    "value": "{{weather.temp}}°C"
-  }
-}
-```
-
-| Namespace | Examples |
-|-----------|----------|
-| `weather` | `weather.temp`, `weather.condition`, `weather.icon` |
-| `calendar` | `calendar.next`, `calendar.countdown` |
-| `steps` | `steps.today`, `steps.goal_pct` |
-| `custom` | User-defined variables via API |
-
-### Device-Resolved Bindings (passed through)
-
-The server does **not** resolve these - they are passed through to the device for local resolution:
-
-| Namespace | Examples |
-|-----------|----------|
-| `time` | `time.hour`, `time.minute`, `time.weekday`, `time.date` |
-| `battery` | `battery.pct` |
 
 ---
 
 ## API Endpoints
 
-### Sync (Primary Endpoint)
-
-**POST** `/api/crispface/sync`
-
-The main device communication endpoint. Devices call this on wake to report status and receive updates.
-
-Request:
-```json
-{
-  "device_id": "watchy-a1b2c3",
-  "battery_pct": 78,
-  "current_face": "daily-driver",
-  "stale_complications": ["weather-temp", "calendar-next"]
-}
-```
-
-Response:
-```json
-{
-  "faces": ["daily-driver", "minimal", "calendar-view"],
-  "current_face": {
-    "id": "daily-driver",
-    "complications": [...]
-  },
-  "complication_updates": {
-    "weather-temp": {"value": "12°", ...},
-    "calendar-next": {"value": "Team sync in 2h", ...}
-  },
-  "ntp_sync": true
-}
-```
-
-### Registration
-
-**POST** `/api/crispface/register`
-
-Devices call this on first boot to register with the server.
-
-```json
-{
-  "device_id": "watchy-a1b2c3",
-  "firmware_version": "crispface-0.1.0",
-  "capabilities": {
-    "display": "200x200x1",
-    "buttons": 4,
-    "sensors": ["accelerometer", "rtc", "battery"]
-  }
-}
-```
-
-### Face Definition
-
-**GET** `/api/crispface/face/{face_id}`
-
-Returns full face JSON. Used when switching faces.
+All endpoints return JSON. Python endpoints are routed through `router.php`.
 
 ### Authentication
 
-- Devices authenticate with a pre-shared token via `Authorization: Bearer <token>` header
-- Server validates token, returns 401 if invalid
-- Tokens are managed in the web admin interface
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `login.py` | POST | None | Login with `{username, password}`, sets session cookie |
+| `logout.py` | POST | None | Clears session cookie |
+| `session.py` | GET | None | Returns `{authenticated, user, role}` |
 
-### Protocol Versioning
+### User Management (Admin Only)
 
-All device requests include header:
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `users.py` | GET | Admin | List users (safe fields: id, username, role, created_at) |
+| `users.py` | POST | Admin | Create user `{username, password, role}` — generates API token, creates data dirs |
+| `user.py?id=` | DELETE | Admin | Delete user and their data (cannot delete self) |
 
-```
-X-CrispFace-Version: 0.4
-```
+### Face Management
 
-Server responds with error if version too old:
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `faces.py` | GET | Auth | List all faces for current user |
+| `faces.py` | POST | Auth | Create face `{name}` or duplicate `{duplicate_from, name, watch_id}` |
+| `face.py?id=` | GET | Auth | Get single face |
+| `face.py?id=` | POST | Auth | Update face (name, background, complications) |
+| `face.py?id=` | DELETE | Auth | Delete face (also removes from watches) |
 
-```json
-{
-  "error": "version_mismatch",
-  "minimum_version": "0.3",
-  "message": "Please update firmware"
-}
-```
+### Watch Management
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `watches.py` | GET | Auth | List all watches (auto-creates default if none) |
+| `watches.py` | POST | Auth | Create watch `{name}` |
+| `watch.py?id=` | GET | Auth | Get single watch |
+| `watch.py?id=` | POST | Auth | Update watch (name, face_ids, wifi_networks, timezone) |
+| `watch.py?id=` | DELETE | Auth | Delete watch |
+
+### Complication Types
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `complications.py` | GET | Auth | List all complication types |
+| `complications.py` | POST | Admin | Create new type `{name}` |
+| `complication.py?id=` | GET | Auth | Get type with script source |
+| `complication.py?id=` | POST | Admin | Update type (name, description, variables, script_source) |
+| `complication.py?id=` | DELETE | Admin | Delete type and its script |
+
+### Firmware Sync
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `watch_faces.py?watch_id=` | GET | Bearer | Returns resolved faces for firmware |
+
+### Build
+
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `build_firmware.php?env=&watch_id=` | GET | None | Build firmware, returns manifest |
+
+### Complication Data Sources (`sources/`)
+
+Source scripts are Python CGI scripts that return `{"value": "..."}`. They are called by `watch_faces.py` during sync to resolve server-side complication values.
+
+| Source | Parameters | Description |
+|--------|-----------|-------------|
+| `time.py` | `format` (HH:MM, HH:MM:SS, 12h, date, full) | Current time (editor preview) |
+| `weather.py` | `city` | Weather via Open-Meteo API (15-min cache) |
+| `uk_weather.py` | `apikey`, `town`, `display`, `refresh` | UK weather via Met Office DataHub |
+| `uk_town_lookup.py` | `q` | UK town search (returns name, county, lat/lon) |
+| `ics_calendar.py` | `feeds` (JSON), `events`, `days`, `detail`, `maxchars` | Multi-feed ICS calendar events |
+| `battery.py` | `display` (icon, voltage, percentage) | Battery preview for editor |
+| `version.py` | — | Reads firmware version from config.h |
+| `text.py` | `text` | Echo text (static complications) |
+| `sample_word.py` | — | Random word for testing |
 
 ---
 
-## Controls Configuration
+## Firmware Sync Response
 
-Button actions are configured per-face in the web builder. Each button supports three input types:
-
-- **Short press** - Quick tap
-- **Long press** - Hold for 1 second
-- **Double tap** - Two quick taps within 300ms
-
-### Button Layout
-
-```
-[btn1]          [btn3]
-   (top-left)      (top-right)
-
-[btn2]          [btn4]
-   (bottom-left)   (bottom-right)
-```
-
-### Available Actions
-
-| Action | Description |
-|--------|-------------|
-| `none` | Do nothing (explicitly disabled) |
-| `refresh` | Force refresh current face |
-| `next_face` | Cycle to next face |
-| `prev_face` | Cycle to previous face |
-| `menu` | Open stock Watchy settings menu |
-| `invert` | Toggle display color inversion (dark mode) |
-| `custom` | HTTP POST to specified endpoint |
-
-### Default Button Mapping
-
-| Button | Short | Long | Double |
-|--------|-------|------|--------|
-| btn1 (top-left) | `menu` | `none` | `none` |
-| btn2 (bottom-left) | `refresh` | `none` | `none` |
-| btn3 (top-right) | `next_face` | `none` | `none` |
-| btn4 (bottom-right) | `prev_face` | `none` | `none` |
-
-### Controls JSON Schema
+The `watch_faces.py` endpoint resolves all server-side complications and returns a firmware-ready payload:
 
 ```json
 {
-  "controls": {
-    "btn1": {
-      "action": "menu",
-      "long_action": "none",
-      "double_action": "none"
-    },
-    "btn4": {
-      "action": "custom",
-      "endpoint": "/api/action/toggle-lights",
-      "long_action": "custom",
-      "long_endpoint": "/api/action/all-lights-off",
-      "double_action": "none",
-      "vibrate": 50
-    }
-  }
+    "success": true,
+    "faces": [
+        {
+            "id": "f65dc7a50fa31c67",
+            "name": "Weekend Face",
+            "bg": "white",
+            "stale": 60,
+            "complications": [
+                {
+                    "id": "time",
+                    "type": "time",
+                    "x": 10, "y": 80, "w": 180, "h": 60,
+                    "stale": 600,
+                    "value": "14:32",
+                    "font": "sans",
+                    "size": 48,
+                    "bold": false,
+                    "align": "center",
+                    "color": "white",
+                    "local": true
+                }
+            ]
+        }
+    ],
+    "fetched_at": 1707900000
 }
 ```
 
-### Custom Action Fields
-
-For `custom` actions, specify the endpoint:
-- `endpoint` - URL for short press custom action
-- `long_endpoint` - URL for long press custom action
-- `double_endpoint` - URL for double tap custom action
-
-### Haptic Feedback
-
-`vibrate`: Duration in milliseconds (0 = none). Applies to all actions on that button.
+Key transformations from editor format to firmware format:
+- Font family: `sans-serif` → `sans`, `serif` → `serif`, `monospace` → `mono`
+- `local: true` flag set for time, date, battery, version complications (rendered on-device)
+- `stale` computed as minimum refresh_interval across non-local complications (min 300s)
+- Server-side complication values fetched from source scripts and injected as `value`
 
 ---
 
 ## Web Builder
 
-### Face Editor
+### Face Editor (`editor.html`)
 
-- **200x200 canvas** with e-paper simulation (black/white, no antialiasing)
-- **Drag existing complications** to reposition
-- **Drag to create** new complications (draw rectangle to set bounds)
+- **200x200 Fabric.js canvas** with 1-bit e-paper simulation (black/white only)
+- **Click to select** complications, drag to reposition
 - **Resize handles** on selected complications
-- **Property panel** for editing content, font, staleness, etc.
-- **Face list** sidebar for managing multiple faces
-- **Preview mode** showing simulated watch display
+- **Left panel**: Face settings (name, background, face selector, refresh intervals)
+- **Right panel**: Properties for selected complication (position, size, font, content, source)
+- **Toolbar**: Add complication (by type), delete selected, save, simulate
+- **Text rendering**: Uses canvas 2D API in Fabric.js `after:render` hook with `GFX_METRICS` table for pixel-accurate preview matching firmware rendering
+- **Advanced toggle** in properties panel shows complication ID, source URL, and stale interval
 
-### Button Configuration
+### Font System
 
-- **Visual button mapper** - Click button in preview to configure
-- **Action dropdowns** for short, long, and double tap
-- **Endpoint input** for custom actions
-- **Vibration slider** (0-200ms)
-- **Reset to defaults** button
+Text complications use GFX-compatible bitmap fonts for 1-bit rendering:
 
-### Complication Library
+| Editor Family | Firmware Name | Typeface |
+|---------------|---------------|----------|
+| `sans-serif` | `sans` | FreeSans |
+| `serif` | `serif` | FreeSerif |
+| `monospace` | `mono` | FreeMono |
 
-- Pre-built templates (time, date, weather, battery, etc.)
-- Drag from library onto canvas
-- Templates come with sensible defaults
+Each family available in regular and bold. Sizes (editor stored value → GFX pt):
 
-### Bitmap Tools
+| Stored | GFX pt | ~px on watch |
+|--------|--------|-------------|
+| 8, 12 | 9pt | 13px |
+| 16 | 12pt | 17px |
+| 24 | 18pt | 25px |
+| 48 | 24pt | 33px |
+| 60 | 36pt | 51px |
+| 72 | 48pt | 67px |
 
-- **Image importer**: Upload PNG/JPG, converts to 1-bit bitmap
-- **Pixel editor**: Toggle individual pixels for custom icons
-- **Dithering options**: Floyd-Steinberg, threshold, etc.
-- **Icon library**: Common icons pre-converted
+Standard sizes (9/12/18/24pt) from Adafruit GFX library. 36pt and 48pt custom-generated via `firmware/generate_fonts.sh` using FreeFont TTFs bundled in `firmware/tools/fonts/`.
 
-### Multi-Device Support
+### Pages
 
-- **Device list** - All registered watches with status
-- **Device groups** - Assign faces to multiple devices at once
-- **Per-device overrides** - Different button mappings or complications per watch
-- **Sync status** - Last seen, battery level, firmware version per device
-- **Bulk actions** - Push face to all devices, update all tokens
+| Page | Description |
+|------|-------------|
+| `index.html` | Login page |
+| `faces.html` | Face list with grid/list view, drag-to-reorder, duplicate, delete |
+| `editor.html` | Fabric.js face editor with properties panel |
+| `complications.html` | Complication type list (admin sees edit/delete, users browse) |
+| `complication-edit.html` | Edit type: name, description, variables, Python script (admin only) |
+| `watch-edit.html` | Edit watch: name, timezone, WiFi networks, face assignment |
+| `flash.html` | Build-on-demand + Web Serial flashing with flash history |
+| `users.html` | User management — list, create, delete (admin only) |
 
-### Device Management
+### Build & Flash (`flash.html`)
 
-- Register new devices via token
-- Rename devices for easy identification
-- Per-device face list assignment
-- Deregister/remove devices
-- View sync history and errors
+1. Select watch (injects per-watch WiFi config into firmware)
+2. Select firmware (CrispFace or Stock Watchy)
+3. **Build** — server compiles firmware, auto-bumps version, returns manifest
+4. **Flash to Watchy** — ESP Web Tools opens serial port picker and flashes device
+
+Requires Chrome or Edge 89+ (Web Serial API). Flash button must be clicked directly (user gesture required).
 
 ---
 
-## Example Face
+## Build Pipeline
 
-```json
-{
-  "id": "daily-driver",
-  "name": "Daily Driver",
-  "background": "black",
-  "stale_seconds": 900,
-  "complications": [
-    {
-      "type": "text",
-      "id": "time",
-      "x": 10,
-      "y": 60,
-      "w": 180,
-      "h": 50,
-      "stale_seconds": 60,
-      "content": {
-        "value": "{{time.hour}}:{{time.minute}}",
-        "font": "sans-48",
-        "align": "center",
-        "color": "white"
-      }
-    },
-    {
-      "type": "text",
-      "id": "date",
-      "x": 10,
-      "y": 120,
-      "w": 180,
-      "h": 24,
-      "content": {
-        "value": "{{time.weekday}}, {{time.date}}",
-        "font": "sans-24",
-        "align": "center",
-        "color": "white"
-      }
-    },
-    {
-      "type": "bitmap",
-      "id": "weather-icon",
-      "x": 10,
-      "y": 10,
-      "w": 32,
-      "h": 32,
-      "stale_seconds": 1800,
-      "content": {
-        "data": "base64-bitmap-data-here"
-      }
-    },
-    {
-      "type": "text",
-      "id": "weather-temp",
-      "x": 50,
-      "y": 14,
-      "w": 50,
-      "h": 24,
-      "stale_seconds": 1800,
-      "content": {
-        "value": "{{weather.temp}}°",
-        "font": "sans-24",
-        "align": "left",
-        "color": "white"
-      }
-    },
-    {
-      "type": "progress",
-      "id": "battery",
-      "x": 160,
-      "y": 10,
-      "w": 30,
-      "h": 12,
-      "content": {
-        "value": "{{battery.pct_decimal}}",
-        "direction": "horizontal",
-        "style": "segmented"
-      }
-    }
-  ],
-  "controls": {
-    "btn1": {"action": "menu", "long_action": "none", "double_action": "none"},
-    "btn2": {"action": "refresh", "long_action": "invert", "double_action": "none", "vibrate": 30},
-    "btn3": {"action": "next_face", "long_action": "none", "double_action": "none"},
-    "btn4": {"action": "custom", "endpoint": "/api/action/toggle-lights", "long_action": "custom", "long_endpoint": "/api/action/all-lights-off", "double_action": "none", "vibrate": 50}
-  }
-}
-```
+`api/build_firmware.php` handles web-triggered builds:
+
+1. Auto-bumps patch version in `config.h` (persisted)
+2. Injects per-watch WiFi networks, timezone, and API token (temporary)
+3. Runs `pio run -e watchy` (or `stock`)
+4. Merges binary with `esptool --chip esp32s3 merge-bin`
+5. Writes timestamped binary and manifest JSON to `firmware-builds/`
+6. Restores `config.h` defaults
+7. Cleans up old builds (keeps last 3)
+8. Returns `{success, manifest, version, size}` as JSON
 
 ---
 
 ## Implementation Status
 
-### Implemented
-- Face editor: 200x200 Fabric.js canvas with text complications
-- Complication positioning, resizing, font/size/bold/alignment/colour
-- Face CRUD and watch CRUD (flat-file JSON)
-- Complication library: time, date, weather, sample word sources
-- Watch faces API endpoint with Bearer auth and server-side resolution
-- Build-on-demand firmware compilation (`api/build_firmware.php`)
-- Web Serial flashing page (`flash.html`) with Test Connection, Build, Flash buttons
+### Implemented (v0.2.x)
+- Multi-user with admin/user roles
+- Face editor with Fabric.js canvas and pixel-accurate font preview
+- Text complications with positioning, fonts (3 families, 6 sizes, bold), alignment, colour
+- Complication type system with admin-managed Python source scripts
+- Data sources: time, weather (Open-Meteo + Met Office), ICS calendar, battery, version, custom text
+- Face CRUD with duplicate, drag-to-reorder, per-watch assignment
+- Watch CRUD with per-watch WiFi networks (up to 5), timezone
+- Firmware sync endpoint with Bearer auth and server-side value resolution
+- Build-on-demand firmware compilation with auto version bump
+- Web Serial flashing with flash history log
+- Flat-file JSON storage (no database)
 
 ### Not Yet Implemented
-- Bitmap tools (image import, pixel editor, dithering)
-- Progress bar and QR code complication types
-- Visual button mapper in editor
-- Haptic feedback configuration
-- Multi-device management UI
+- Bitmap complications (image import, 1-bit dithering)
+- Progress bar complications
+- QR code complications
+- Custom button actions (configurable per-face)
+- OTA firmware updates
 - Device sync status dashboard
-- Icon library
-
----
-
-## Future Considerations
-
-- **Bitmap complications**: Image import with 1-bit dithering
-- **Downloadable fonts**: Upload custom fonts for use in faces
-- **OTA updates**: Push firmware updates from web UI
-- **Step counter integration**: Report steps to server, display in complications
-- **Multi-device dashboard**: Sync status, battery, firmware version per device
 
 ---
 
@@ -533,8 +374,9 @@ For `custom` actions, specify the endpoint:
 | Version | Date | Notes |
 |---------|------|-------|
 | 0.1 | 2026-02-06 | Initial draft (combined spec) |
-| 0.2 | 2026-02-07 | Removed face stack, canvas type. Added visual builder spec. Clarified time handling on-device. Reduced fonts to minimal set. |
-| 0.3 | 2026-02-07 | Added: offline behavior, long press support, inherit from stock Watchy firmware, button-only wake. |
-| 0.4 | 2026-02-07 | Added: double-tap support, full button action list, default mappings, button config in web builder, multi-device support. |
+| 0.2 | 2026-02-07 | Removed face stack, canvas type. Added visual builder spec. |
+| 0.3 | 2026-02-07 | Added offline behavior, long press support, button-only wake. |
+| 0.4 | 2026-02-07 | Added double-tap support, full button action list, default mappings. |
 | 0.4.1 | 2026-02-11 | Split into separate web builder and firmware specs. |
-| 0.5 | 2026-02-14 | Added implementation status. Web Serial flashing now implemented. |
+| 0.5 | 2026-02-14 | Added implementation status. Web Serial flashing implemented. |
+| 0.6 | 2026-02-17 | Complete rewrite to match actual implementation. Replaced speculative API/controls/bindings with real endpoints, storage model, and data flow. Added multi-user, complication types, per-watch WiFi, font system documentation. Removed crisprain-spec.md (redundant combined spec). |

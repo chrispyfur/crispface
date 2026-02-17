@@ -1,4 +1,4 @@
-# CrispFace Firmware Specification v0.5
+# CrispFace Firmware Specification v0.6
 
 Firmware for the Watchy ESP32-S3 thin client that renders CrispFace watch faces.
 
@@ -55,7 +55,7 @@ The firmware is intentionally kept in a single `main.cpp` file. The CrispFace cl
 - ESP32-S3 has ~320KB SRAM
 - ArduinoJson doc for sync: 8KB
 - ArduinoJson doc for face render: 4KB
-- Font data: ~40KB (FreeSans, FreeSansBold, FreeMono at 9/12/18/24pt)
+- Font data: ~80KB (FreeSans, FreeSerif, FreeMono — regular+bold — at 9/12/18/24/36/48pt)
 - Display framebuffer: 5KB (200x200 1-bit, managed by GxEPD2)
 
 ---
@@ -96,8 +96,8 @@ Each complication is rendered as positioned text within a bounding box:
 | Field | Description |
 |-------|-------------|
 | `x`, `y`, `w`, `h` | Bounding rectangle (pixels) |
-| `font` | `"sans"` or `"mono"` |
-| `size` | Editor CSS px (8, 12, 16, 24, 48) |
+| `font` | `"sans"`, `"serif"`, or `"mono"` |
+| `size` | Editor CSS px (8, 12, 16, 24, 48, 60, 72) |
 | `bold` | Boolean |
 | `align` | `"left"`, `"center"`, `"right"` |
 | `color` | `"black"` or `"white"` |
@@ -115,8 +115,18 @@ Editor CSS px values map to Adafruit GFX pt sizes:
 | 16 | 12pt | ~17px |
 | 24 | 18pt | ~25px |
 | 48 | 24pt | ~33px |
+| 60 | 36pt | ~51px |
+| 72 | 48pt | ~67px |
 
-Available fonts: FreeSans (regular + bold) and FreeMono (regular) at all four pt sizes. Custom 48pt fonts are currently disabled (fall back to 24pt).
+### Available Fonts
+
+| Family | Firmware name | Regular | Bold |
+|--------|--------------|---------|------|
+| FreeSans | `sans` | Yes | Yes |
+| FreeSerif | `serif` | Yes | Yes |
+| FreeMono | `mono` | Yes | Yes |
+
+Standard sizes (9/12/18/24pt) from Adafruit GFX library. 36pt and 48pt custom-generated via `firmware/generate_fonts.sh` using FreeFont TTFs bundled in `firmware/tools/fonts/`.
 
 ### Local Complications
 
@@ -237,8 +247,11 @@ Requires Chrome or Edge 89+ (Web Serial API). The Flash button must be clicked d
 | `CRISPFACE_WATCH_ID` | Watch identifier for this device |
 | `CRISPFACE_API_TOKEN` | Bearer token for API auth |
 | `CRISPFACE_HTTP_TIMEOUT` | HTTP timeout in ms (15000) |
-| `CRISPFACE_WIFI_SSID` | WiFi SSID (hardcoded) |
-| `CRISPFACE_WIFI_PASS` | WiFi password (hardcoded) |
+| `CRISPFACE_WIFI_COUNT` | Number of configured WiFi networks (0-5) |
+| `CRISPFACE_WIFI_SSID_0..N` | WiFi SSID for each network |
+| `CRISPFACE_WIFI_PASS_0..N` | WiFi password for each network |
+
+WiFi networks are configured per-watch in the web UI. The build process injects them into `config.h` at build time. The firmware scans available networks (`WiFi.scanNetworks()`) and connects to the strongest known one.
 
 ---
 
@@ -248,7 +261,6 @@ Requires Chrome or Edge 89+ (Web Serial API). The Flash button must be clicked d
 - **ArduinoJson v6 only** — v7 conflicts with Arduino_JSON bundled by Watchy
 - **RTC_DATA_ATTR lost on crash** — firmware recovers face count from SPIFFS on boot
 - **Watch RTC may be wrong** — timestamps are relative, not absolute. Both cfLastSync and staleness use `makeTime(currentTime)` so the difference is always correct
-- **Custom 48pt fonts disabled** — the generated font headers had issues. Falls back to 24pt for now
 - **WiFi.mode(WIFI_STA) required** before WiFi.begin() on ESP32-S3
 
 ---
@@ -256,9 +268,9 @@ Requires Chrome or Edge 89+ (Web Serial API). The Flash button must be clicked d
 ## Implemented vs Planned
 
 ### Implemented (v0.2.x)
-- Text complications with positioning, fonts, alignment, colour
-- Local complications: time, date, battery
-- Server-side complication resolution (weather, etc.)
+- Text complications with positioning, fonts (3 families, 6 sizes, bold), alignment, colour
+- Local complications: time, date, battery, version
+- Server-side complication resolution (weather, calendar, etc.)
 - Face cycling (top-right/bottom-right buttons)
 - Manual sync (top-left button)
 - Auto-sync on stale interval
@@ -267,6 +279,7 @@ Requires Chrome or Edge 89+ (Web Serial API). The Flash button must be clicked d
 - Stale data italic rendering
 - Partial refresh (no flicker)
 - Double-press full refresh
+- Per-watch WiFi networks (up to 5, scans and connects to strongest)
 - Build-on-demand with auto version bump
 - Web Serial flashing
 
@@ -278,8 +291,6 @@ Requires Chrome or Edge 89+ (Web Serial API). The Flash button must be clicked d
 - Long press / double tap button actions
 - Haptic feedback
 - OTA firmware updates
-- Configurable WiFi (currently hardcoded)
-- Device registration
 - Offline indicator icon
 
 ---
@@ -294,3 +305,4 @@ Requires Chrome or Edge 89+ (Web Serial API). The Flash button must be clicked d
 | 0.4 | 2026-02-07 | Added: double-tap support, full button action list, default mappings. |
 | 0.4.1 | 2026-02-11 | Split into separate firmware and web builder specs. Added Web Serial section. |
 | 0.5 | 2026-02-14 | Updated to match implemented firmware v0.2.x: single-file architecture, SPIFFS caching, progress bar sync, font mapping, partial refresh, double-press full refresh, build-on-demand, implemented vs planned tracking. |
+| 0.6 | 2026-02-17 | Added FreeSerif font family, 36pt/48pt custom font sizes, per-watch WiFi networks, version complication. Removed outdated 48pt disabled note. Updated config.h WiFi defines. |

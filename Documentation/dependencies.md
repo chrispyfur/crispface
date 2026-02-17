@@ -9,7 +9,7 @@ Required packages for building and running CrispFace on Debian/Ubuntu Linux.
 | `apache2` | Web server |
 | `php` (8.4+) | Serves HTML pages, firmware build endpoint |
 | `python3` | CGI API endpoints |
-| `libfreetype6` | Font rendering (runtime library) |
+| `python3-bcrypt` | Password hashing for user authentication |
 
 ## Build Tools (Firmware)
 
@@ -18,9 +18,11 @@ Required packages for building and running CrispFace on Debian/Ubuntu Linux.
 | `python3-pip` | PlatformIO installation |
 | `platformio` | ESP32-S3 firmware compiler (installed via pip) |
 
+PlatformIO includes `esptool` which is used for merging firmware binaries (`esptool --chip esp32s3 merge-bin`).
+
 ## Font Generation (Optional)
 
-Only needed when generating custom font sizes (e.g. 48pt) beyond the standard Adafruit GFX 9/12/18/24pt.
+Only needed when generating custom font sizes (e.g. 36pt, 48pt) beyond the standard Adafruit GFX 9/12/18/24pt.
 
 | Package | Purpose |
 |---|---|
@@ -47,7 +49,7 @@ bash generate_fonts.sh
 
 ```bash
 # Runtime + build essentials
-sudo apt-get install -y apache2 php python3 python3-pip
+sudo apt-get install -y apache2 php python3 python3-pip python3-bcrypt
 
 # Font generation (optional)
 sudo apt-get install -y pkg-config libfreetype-dev gcc
