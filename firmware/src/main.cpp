@@ -49,22 +49,24 @@ public:
             return;
         }
 
-        // If RTC time looks unset, seed it from build epoch
+        // If RTC time looks wrong, seed it from build epoch.
+        // ESP32-S3 has no external RTC — internal clock resets on hard reset
+        // and NTP can return bogus 2036 dates (SNTP epoch overflow).
         #if CRISPFACE_BUILD_EPOCH > 0
-        RTC.read(currentTime);
-        if (currentTime.Year + 1970 < 2026) {
-            time_t epoch = CRISPFACE_BUILD_EPOCH + (CRISPFACE_GMT_OFFSET * 3600);
-            struct tm *bt = localtime(&epoch);
-            tmElements_t tm;
-            tm.Year   = bt->tm_year + 1900 - 1970;
-            tm.Month  = bt->tm_mon + 1;
-            tm.Day    = bt->tm_mday;
-            tm.Hour   = bt->tm_hour;
-            tm.Minute = bt->tm_min;
-            tm.Second = bt->tm_sec;
-            tm.Wday   = bt->tm_wday + 1;
-            RTC.set(tm);
-            RTC.read(currentTime);
+        {
+            time_t now_epoch;
+            time(&now_epoch);
+            // Seed if time is before build (reset) or >2 years after (NTP overflow)
+            if (now_epoch < CRISPFACE_BUILD_EPOCH ||
+                now_epoch > CRISPFACE_BUILD_EPOCH + 63072000L) {
+                struct timeval tv;
+                tv.tv_sec = CRISPFACE_BUILD_EPOCH;
+                tv.tv_usec = 0;
+                settimeofday(&tv, NULL);
+                // Apply timezone offset via configTime (no NTP servers)
+                configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "");
+                RTC.read(currentTime);
+            }
         }
         #endif
 
@@ -443,6 +445,15 @@ private:
     void cfSyncNTP() {
         struct tm timeinfo;
         if (getLocalTime(&timeinfo, 5000)) {
+            // Validate: reject NTP results before build time or >2 years after
+            // (SNTP epoch overflow can return bogus 2036 dates)
+            time_t ntpEpoch = mktime(&timeinfo);
+            #if CRISPFACE_BUILD_EPOCH > 0
+            if (ntpEpoch < CRISPFACE_BUILD_EPOCH ||
+                ntpEpoch > CRISPFACE_BUILD_EPOCH + 63072000L) {
+                return; // NTP returned garbage, keep current RTC
+            }
+            #endif
             tmElements_t tm;
             tm.Year   = timeinfo.tm_year + 1900 - 1970;
             tm.Month  = timeinfo.tm_mon + 1;
