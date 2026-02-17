@@ -326,6 +326,39 @@
         var cards = container.querySelectorAll('.face-card');
         var dragSrcEl = null;
 
+        // FLIP animation: snapshot positions, do DOM move, animate displacement
+        function animateReorder(movedEl) {
+            var siblings = container.querySelectorAll('.face-card');
+            // Snapshot current positions of all cards except the dragged one
+            var rects = {};
+            for (var s = 0; s < siblings.length; s++) {
+                if (siblings[s] !== movedEl) {
+                    rects[siblings[s].getAttribute('data-face-id')] = siblings[s].getBoundingClientRect();
+                }
+            }
+            return rects;
+        }
+
+        function playFlip(before) {
+            var siblings = container.querySelectorAll('.face-card');
+            for (var s = 0; s < siblings.length; s++) {
+                var el = siblings[s];
+                var id = el.getAttribute('data-face-id');
+                if (!before[id]) continue;
+                var after = el.getBoundingClientRect();
+                var dx = before[id].left - after.left;
+                var dy = before[id].top - after.top;
+                if (dx === 0 && dy === 0) continue;
+                // Apply inverse transform (snap to old position)
+                el.style.transition = 'none';
+                el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+                // Force reflow then animate to natural position
+                el.offsetHeight; // eslint-disable-line no-unused-expressions
+                el.style.transition = 'transform 200ms cubic-bezier(0.2, 0, 0, 1)';
+                el.style.transform = '';
+            }
+        }
+
         for (var i = 0; i < cards.length; i++) {
             (function (card) {
                 card.addEventListener('dragstart', function (e) {
@@ -351,18 +384,48 @@
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
 
-                    // Live reorder: move the dragged card in the DOM
                     var rect = card.getBoundingClientRect();
-                    var midY = rect.top + rect.height / 2;
+                    var isListView = container.classList.contains('face-list');
+                    var needsMove = false;
+                    var insertBefore = null;
 
-                    if (e.clientY < midY) {
-                        if (card.previousElementSibling !== dragSrcEl) {
-                            container.insertBefore(dragSrcEl, card);
+                    if (isListView) {
+                        // List: vertical only
+                        var midY = rect.top + rect.height / 2;
+                        if (e.clientY < midY) {
+                            if (card.previousElementSibling !== dragSrcEl) {
+                                needsMove = true;
+                                insertBefore = card;
+                            }
+                        } else {
+                            if (card.nextElementSibling !== dragSrcEl) {
+                                needsMove = true;
+                                insertBefore = card.nextSibling;
+                            }
                         }
                     } else {
-                        if (card.nextElementSibling !== dragSrcEl) {
-                            container.insertBefore(dragSrcEl, card.nextSibling);
+                        // Grid: use both axes
+                        var midX = rect.left + rect.width / 2;
+                        var midY2 = rect.top + rect.height / 2;
+                        var before = (e.clientY < midY2) || (e.clientY < midY2 + rect.height / 4 && e.clientX < midX);
+                        if (before) {
+                            if (card.previousElementSibling !== dragSrcEl) {
+                                needsMove = true;
+                                insertBefore = card;
+                            }
+                        } else {
+                            if (card.nextElementSibling !== dragSrcEl) {
+                                needsMove = true;
+                                insertBefore = card.nextSibling;
+                            }
                         }
+                    }
+
+                    if (needsMove) {
+                        // FLIP: snapshot → move → animate
+                        var rects = animateReorder(dragSrcEl);
+                        container.insertBefore(dragSrcEl, insertBefore);
+                        playFlip(rects);
                     }
                 });
 
