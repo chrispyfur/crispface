@@ -330,46 +330,44 @@
             (function (card) {
                 card.addEventListener('dragstart', function (e) {
                     dragSrcEl = card;
-                    card.classList.add('dragging');
                     e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', card.getAttribute('data-face-id'));
+                    e.dataTransfer.setData('text/plain', '');
+                    // Delay so browser captures drag image before we fade it
+                    setTimeout(function () {
+                        card.classList.add('dragging');
+                    }, 0);
                 });
 
                 card.addEventListener('dragend', function () {
                     card.classList.remove('dragging');
-                    var all = container.querySelectorAll('.face-card');
-                    for (var j = 0; j < all.length; j++) {
-                        all[j].classList.remove('drag-over');
+                    if (dragSrcEl) {
+                        saveFaceOrder(watchId);
+                        dragSrcEl = null;
                     }
                 });
 
                 card.addEventListener('dragover', function (e) {
-                    if (dragSrcEl === card) return;
+                    if (!dragSrcEl || dragSrcEl === card) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = 'move';
-                    card.classList.add('drag-over');
-                });
 
-                card.addEventListener('dragleave', function () {
-                    card.classList.remove('drag-over');
+                    // Live reorder: move the dragged card in the DOM
+                    var rect = card.getBoundingClientRect();
+                    var midY = rect.top + rect.height / 2;
+
+                    if (e.clientY < midY) {
+                        if (card.previousElementSibling !== dragSrcEl) {
+                            container.insertBefore(dragSrcEl, card);
+                        }
+                    } else {
+                        if (card.nextElementSibling !== dragSrcEl) {
+                            container.insertBefore(dragSrcEl, card.nextSibling);
+                        }
+                    }
                 });
 
                 card.addEventListener('drop', function (e) {
                     e.preventDefault();
-                    card.classList.remove('drag-over');
-                    if (!dragSrcEl || dragSrcEl === card) return;
-
-                    var all = Array.prototype.slice.call(container.children);
-                    var srcIdx = all.indexOf(dragSrcEl);
-                    var dstIdx = all.indexOf(card);
-
-                    if (srcIdx < dstIdx) {
-                        container.insertBefore(dragSrcEl, card.nextSibling);
-                    } else {
-                        container.insertBefore(dragSrcEl, card);
-                    }
-
-                    saveFaceOrder(watchId);
                 });
             })(cards[i]);
         }

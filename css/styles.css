@@ -339,11 +339,6 @@ a:hover {
     opacity: 0.4;
 }
 
-.face-card.drag-over {
-    border-color: var(--orange);
-    box-shadow: 0 0 0 2px rgba(255, 127, 79, 0.3);
-}
-
 /* Face list view */
 .face-list {
     display: flex;
