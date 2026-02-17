@@ -13,25 +13,32 @@
         {
             "name": "events",
             "label": "Max Events",
-            "type": "text",
+            "type": "stepper",
+            "min": 1,
+            "max": 20,
             "default": "3"
         },
         {
             "name": "days",
             "label": "Days Ahead",
-            "type": "text",
+            "type": "stepper",
+            "min": 1,
+            "max": 30,
             "default": "1"
         },
         {
             "name": "detail",
-            "label": "Detail (title/location/full)",
-            "type": "text",
+            "label": "Detail",
+            "type": "select",
+            "options": "title,location,full",
             "default": "title"
         },
         {
             "name": "maxchars",
-            "label": "Max Chars Per Line",
-            "type": "text",
+            "label": "Chars Per Line",
+            "type": "stepper",
+            "min": 5,
+            "max": 50,
             "default": "20"
         },
         {

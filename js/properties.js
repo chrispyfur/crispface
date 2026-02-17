@@ -103,6 +103,12 @@
                 for (var vi = 0; vi < vars.length; vi++) {
                     var v = vars[vi];
                     var currentVal = params[v.name] !== undefined ? params[v.name] : (v.default || '');
+                    if (v.type === 'checkbox') {
+                        html += '<div class="prop-row prop-row-checkbox"><label class="prop-checkbox-label">' +
+                            '<input type="checkbox" id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input prop-var-checkbox"' + (currentVal === 'true' ? ' checked' : '') + ' />' +
+                            escHtml(v.label) + '</label></div>';
+                        continue;
+                    }
                     html += '<div class="prop-row"><label for="prop-var-' + escHtml(v.name) + '">' + escHtml(v.label) + '</label>';
                     if (v.type === 'feeds') {
                         var feedsList = [];
@@ -126,8 +132,17 @@
                             html += '<option value="' + escHtml(optVal) + '"' + (currentVal === optVal ? ' selected' : '') + '>' + escHtml(optVal.charAt(0).toUpperCase() + optVal.slice(1)) + '</option>';
                         }
                         html += '</select></div>';
-                    } else if (v.type === 'checkbox') {
-                        html += '<input type="checkbox" id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input prop-var-checkbox"' + (currentVal === 'true' ? ' checked' : '') + ' /></div>';
+                    } else if (v.type === 'stepper') {
+                        var stepperId = 'prop-var-' + escHtml(v.name);
+                        var stepVal = parseInt(currentVal, 10) || 0;
+                        html += '<div class="stepper">' +
+                            '<button type="button" class="stepper-btn stepper-dec" data-for="' + stepperId + '">\u2212</button>' +
+                            '<input type="number" id="' + stepperId + '" value="' + stepVal + '"' +
+                            ' data-var-name="' + escHtml(v.name) + '" class="prop-var-input"' +
+                            (v.min !== undefined ? ' min="' + v.min + '"' : '') +
+                            (v.max !== undefined ? ' max="' + v.max + '"' : '') + ' />' +
+                            '<button type="button" class="stepper-btn stepper-inc" data-for="' + stepperId + '">+</button>' +
+                            '</div></div>';
                     } else {
                         html += '<input type="text" id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input" value="' + escHtml(currentVal) + '" />';
                         // Town verification status for uk-weather
