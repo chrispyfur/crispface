@@ -328,8 +328,8 @@ if any_alerts:
         dt = ev.get('dtstart')
         if not dt or dt <= now:
             continue
-        minutes_from_now = int((dt - now).total_seconds() / 60)
-        if minutes_from_now <= 0:
+        seconds_from_now = int((dt - now).total_seconds())
+        if seconds_from_now <= 0:
             continue
         title = ev.get('summary', 'Event')
         loc = ev.get('location', '')
@@ -338,13 +338,13 @@ if any_alerts:
         dt_iso = ev['dtstart'].isoformat() if ev.get('dtstart') else ''
         uid = hashlib.md5((feed_url + '|' + dt_iso + '|' + title).encode()).hexdigest()[:16]
         alerts.append({
-            'min': minutes_from_now,
+            'sec': seconds_from_now,
             'text': alert_text[:59],
             'ins': bool(ev.get('_insistent')),
             'uid': uid,
         })
     # Sort by nearest first, cap at 10
-    alerts.sort(key=lambda a: a['min'])
+    alerts.sort(key=lambda a: a['sec'])
     result['alerts'] = alerts[:10]
 
 respond(result)

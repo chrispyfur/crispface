@@ -111,11 +111,11 @@ public:
                 now = makeTime(currentTime);
             }
 
-            // Check alerts (90s window — watch wakes every 60s, buffer without overlap)
+            // Check alerts (60s window — watch wakes every 60s, no excess buffer needed)
             for (int i = 0; i < cfAlertCount; i++) {
                 if (cfAlerts[i].fired) continue;
                 int diff = cfAlerts[i].eventTime - now;
-                if (diff >= 0 && diff <= 90) {
+                if (diff >= 0 && diff <= 60) {
                     cfAlerts[i].fired = true;
                     if (cfAlerts[i].buzzCount == 0) {
                         // Insistent: buzz first (privacy), reveal text on button press
@@ -640,10 +640,10 @@ private:
                     JsonArray alerts = comp["alerts"].as<JsonArray>();
                     if (alerts.isNull()) continue;
                     for (JsonObject alert : alerts) {
-                        int minFromNow = alert["min"] | 0;
-                        if (minFromNow <= 0) continue;
+                        int secFromNow = alert["sec"] | 0;
+                        if (secFromNow <= 0) continue;
 
-                        int evTime = syncTime + (minFromNow * 60);
+                        int evTime = syncTime + secFromNow;
                         bool ins = alert["ins"] | false;
                         const char* txt = alert["text"] | "Event";
 
