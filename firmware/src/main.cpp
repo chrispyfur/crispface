@@ -127,21 +127,14 @@ public:
             return;
         }
 
-        // If insistent notification active, handle dismissal
+        // If notification active, any button dismisses
         if (cfNotifActive) {
-            if (wakeupBit & (UP_BTN_MASK | DOWN_BTN_MASK)) {
-                // Dismiss notification
-                cfNotifActive = false;
-                cfNotifInsistent = false;
-                cfNotifPreAlert = false;
-                cfNotifText[0] = '\0';
-                RTC.read(currentTime);
-                showWatchFace(true);
-            } else {
-                // BACK/MENU — re-enter notification (will buzz again)
-                RTC.read(currentTime);
-                showWatchFace(true);
-            }
+            cfNotifActive = false;
+            cfNotifInsistent = false;
+            cfNotifPreAlert = false;
+            cfNotifText[0] = '\0';
+            RTC.read(currentTime);
+            showWatchFace(true);
             return;
         }
 
@@ -218,26 +211,40 @@ private:
         const GFXfont* bodyFont = &FreeSans12pt7b;
         drawAligned(cfNotifText, 20, 60, 160, 80, "center", bodyFont, GxEPD_BLACK);
 
-        // "Press button to dismiss" hint near bottom
+        // "Press any button" hint near bottom
         display.setFont(&FreeSans9pt7b);
-        const char* hint = "Press button";
+        const char* hint = "Press any button";
         display.getTextBounds(hint, 0, 0, &tx, &ty, &tw, &th);
         display.setCursor((200 - (int)tw) / 2, 170);
         display.print(hint);
+
+        // Push to display immediately (buzz loop blocks before showWatchFace can flush)
+        display.display(true);
     }
 
     void insistentBuzzLoop() {
-        // Enable button pins as inputs for polling
-        pinMode(UP_BTN_PIN, INPUT);
-        pinMode(DOWN_BTN_PIN, INPUT);
+        // Enable all button pins with pull-ups for reliable polling
+        // (plain INPUT loses RTC pull-up config, pins may float)
+        pinMode(UP_BTN_PIN, INPUT_PULLUP);
+        pinMode(DOWN_BTN_PIN, INPUT_PULLUP);
+        pinMode(BACK_BTN_PIN, INPUT_PULLUP);
+        pinMode(MENU_BTN_PIN, INPUT_PULLUP);
 
-        while (true) {
+        // Timeout after 2 minutes to prevent stuck watch
+        int cycles = 0;
+        const int maxCycles = 24; // 24 × 5s = 2 minutes
+
+        while (cycles < maxCycles) {
             vibMotor(75, 4);
+            cycles++;
 
-            // Wait 5 seconds, polling buttons every 100ms
+            // Wait 5 seconds, polling all buttons every 100ms
             for (int i = 0; i < 50; i++) {
                 delay(100);
-                if (digitalRead(UP_BTN_PIN) == LOW || digitalRead(DOWN_BTN_PIN) == LOW) {
+                if (digitalRead(UP_BTN_PIN) == LOW ||
+                    digitalRead(DOWN_BTN_PIN) == LOW ||
+                    digitalRead(BACK_BTN_PIN) == LOW ||
+                    digitalRead(MENU_BTN_PIN) == LOW) {
                     cfNotifActive = false;
                     cfNotifInsistent = false;
                     cfNotifPreAlert = false;
@@ -246,6 +253,12 @@ private:
                 }
             }
         }
+
+        // Timeout: auto-dismiss so the watch isn't stuck
+        cfNotifActive = false;
+        cfNotifInsistent = false;
+        cfNotifPreAlert = false;
+        cfNotifText[0] = '\0';
     }
 
     // ---- Server sync ----
