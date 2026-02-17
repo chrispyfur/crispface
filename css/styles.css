@@ -493,7 +493,7 @@ body.editor-page .main-content {
 }
 
 .editor-sidebar-right {
-    width: 280px;
+    width: 420px;
     background: #fff;
     border-left: 1px solid var(--gray-light);
     padding: 20px;
