@@ -16,6 +16,7 @@ RTC_DATA_ATTR int  cfLastSync    = 0;
 RTC_DATA_ATTR int  cfSyncInterval = 600; // seconds between server syncs
 RTC_DATA_ATTR bool cfNeedsSync   = true;  // sync on first boot
 RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
+RTC_DATA_ATTR bool cfTimeSeeded   = false; // set after build-epoch seed or NTP sync
 
 // ---- Alert system ----
 struct CfAlert {
@@ -49,24 +50,19 @@ public:
             return;
         }
 
-        // If RTC time looks wrong, seed it from build epoch.
-        // ESP32-S3 has no external RTC — internal clock resets on hard reset
-        // and NTP can return bogus 2036 dates (SNTP epoch overflow).
+        // Seed RTC from build timestamp after flash or hard crash.
+        // ESP32-S3 has no external RTC — internal clock resets on hard reset.
+        // cfTimeSeeded is false after flash/crash (RTC_DATA_ATTR resets to 0),
+        // stays true across normal deep sleep cycles.
         #if CRISPFACE_BUILD_EPOCH > 0
-        {
-            time_t now_epoch;
-            time(&now_epoch);
-            // Seed if time is before build (reset) or >2 years after (NTP overflow)
-            if (now_epoch < CRISPFACE_BUILD_EPOCH ||
-                now_epoch > CRISPFACE_BUILD_EPOCH + 63072000L) {
-                struct timeval tv;
-                tv.tv_sec = CRISPFACE_BUILD_EPOCH;
-                tv.tv_usec = 0;
-                settimeofday(&tv, NULL);
-                // Apply timezone offset via configTime (no NTP servers)
-                configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "");
-                RTC.read(currentTime);
-            }
+        if (!cfTimeSeeded) {
+            struct timeval tv;
+            tv.tv_sec = CRISPFACE_BUILD_EPOCH;
+            tv.tv_usec = 0;
+            settimeofday(&tv, NULL);
+            configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "");
+            RTC.read(currentTime);
+            cfTimeSeeded = true;
         }
         #endif
 
@@ -445,12 +441,10 @@ private:
     void cfSyncNTP() {
         struct tm timeinfo;
         if (getLocalTime(&timeinfo, 5000)) {
-            // Validate: reject NTP results before build time or >2 years after
-            // (SNTP epoch overflow can return bogus 2036 dates)
-            time_t ntpEpoch = mktime(&timeinfo);
+            // Reject NTP results before build time (garbage/overflow)
             #if CRISPFACE_BUILD_EPOCH > 0
-            if (ntpEpoch < CRISPFACE_BUILD_EPOCH ||
-                ntpEpoch > CRISPFACE_BUILD_EPOCH + 63072000L) {
+            time_t ntpEpoch = mktime(&timeinfo);
+            if (ntpEpoch < (time_t)CRISPFACE_BUILD_EPOCH) {
                 return; // NTP returned garbage, keep current RTC
             }
             #endif
@@ -464,6 +458,7 @@ private:
             tm.Wday   = timeinfo.tm_wday + 1; // tm_wday 0=Sun → Wday 1=Sun
             RTC.set(tm);
             RTC.read(currentTime);
+            cfTimeSeeded = true;
         }
     }
 
