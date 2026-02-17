@@ -319,7 +319,7 @@ def save_type(type_id, data):
                     'name': re.sub(r'[^a-zA-Z0-9_]', '', str(v['name']))[:50],
                     'label': str(v.get('label', v['name']))[:100],
                     'type': re.sub(r'[^a-z]', '', str(v.get('type', 'text')))[:20],
-                    'default': str(v.get('default', ''))[:200]
+                    'default': str(v.get('default', ''))[:2000]
                 }
                 if v.get('options'):
                     var_entry['options'] = re.sub(r'[^a-zA-Z0-9_,]', '', str(v['options']))[:500]
