@@ -1,14 +1,14 @@
 {
-    "id": "m365-calendar",
-    "name": "Calendar Feed",
+    "id": "ics-calendar",
+    "name": "ICS Calendar",
     "description": "Calendar events via ICS feed (works with Outlook, Google, Apple, etc.)",
-    "script": "m365_calendar.py",
+    "script": "ics_calendar.py",
     "variables": [
         {
-            "name": "url",
-            "label": "ICS Feed URL",
-            "type": "text",
-            "default": ""
+            "name": "feeds",
+            "label": "Calendars",
+            "type": "feeds",
+            "default": "[]"
         },
         {
             "name": "events",
@@ -48,5 +48,5 @@
         }
     ],
     "created_at": "2026-02-12T00:00:00+00:00",
-    "updated_at": "2026-02-16T17:30:00.704442+00:00"
+    "updated_at": "2026-02-17T00:00:00+00:00"
 }

@@ -104,7 +104,21 @@
                     var v = vars[vi];
                     var currentVal = params[v.name] !== undefined ? params[v.name] : (v.default || '');
                     html += '<div class="prop-row"><label for="prop-var-' + escHtml(v.name) + '">' + escHtml(v.label) + '</label>';
-                    if (v.type === 'select' && v.options) {
+                    if (v.type === 'feeds') {
+                        var feedsList = [];
+                        try { feedsList = JSON.parse(currentVal || '[]'); } catch (e) { feedsList = []; }
+                        html += '<div class="prop-feed-list" id="prop-feed-list" data-var-name="' + escHtml(v.name) + '">';
+                        for (var fi = 0; fi < feedsList.length; fi++) {
+                            html += '<div class="prop-feed-item" data-feed-idx="' + fi + '">';
+                            html += '<span class="prop-feed-name">' + escHtml(feedsList[fi].name || 'Unnamed') + '</span>';
+                            if (feedsList[fi].bold) html += '<span class="prop-feed-bold-badge">BOLD</span>';
+                            html += '<button type="button" class="prop-feed-edit btn btn-sm btn-secondary" data-feed-idx="' + fi + '">Edit</button>';
+                            html += '<button type="button" class="prop-feed-delete btn btn-sm btn-danger" data-feed-idx="' + fi + '">Del</button>';
+                            html += '</div>';
+                        }
+                        html += '<button type="button" class="prop-feed-add btn btn-sm btn-primary" id="prop-feed-add">+ Add Calendar</button>';
+                        html += '</div></div>';
+                    } else if (v.type === 'select' && v.options) {
                         var opts = v.options.split(',');
                         html += '<select id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input prop-var-select">';
                         for (var oi = 0; oi < opts.length; oi++) {
@@ -222,6 +236,7 @@
         panel.innerHTML = html;
         bindPropertyInputs(ctype, local);
         bindSteppers();
+        bindFeeds(ctype);
 
         // Advanced toggle
         var toggle = document.getElementById('prop-advanced-toggle');
@@ -552,6 +567,133 @@
             }
         });
 
+    }
+
+    function bindFeeds(ctype) {
+        var feedList = document.getElementById('prop-feed-list');
+        if (!feedList) return;
+        var varName = feedList.getAttribute('data-var-name');
+
+        function getFeeds() {
+            if (!currentObject || !currentObject.crispfaceData) return [];
+            var params = currentObject.crispfaceData.params || {};
+            try { return JSON.parse(params[varName] || '[]'); } catch (e) { return []; }
+        }
+
+        function saveFeeds(feeds) {
+            if (!currentObject || !currentObject.crispfaceData) return;
+            if (!currentObject.crispfaceData.params) currentObject.crispfaceData.params = {};
+            currentObject.crispfaceData.params[varName] = JSON.stringify(feeds);
+            // Re-render properties to update the list
+            if (CF.repollSource && currentObject.crispfaceData.source) {
+                CF.repollSource(currentObject);
+            }
+            // Re-fire selection to refresh the properties panel
+            if (currentObject) {
+                var d = currentObject.crispfaceData;
+                var gi = CF.getInset || function () { return 0; };
+                var inset = gi(d);
+                var padLeft = d.padding_left || 0;
+                var padTop = d.padding_top || 0;
+                showProperties({
+                    object: currentObject,
+                    data: d,
+                    left: Math.round(currentObject.left) - inset - padLeft,
+                    top: Math.round(currentObject.top) - inset - padTop,
+                    width: Math.round(currentObject.width * (currentObject.scaleX || 1)) + inset * 2 + padLeft,
+                    height: d.h
+                });
+            }
+        }
+
+        function showModal(feed, onSave) {
+            var existing = document.getElementById('prop-feed-modal');
+            if (existing) existing.remove();
+
+            var overlay = document.createElement('div');
+            overlay.className = 'prop-feed-modal';
+            overlay.id = 'prop-feed-modal';
+
+            var card = document.createElement('div');
+            card.className = 'prop-feed-modal-inner';
+            card.innerHTML =
+                '<h4>' + (feed ? 'Edit Calendar' : 'Add Calendar') + '</h4>' +
+                '<div class="form-group"><label for="feed-name">Name</label>' +
+                '<input type="text" id="feed-name" value="' + escHtml(feed ? feed.name : '') + '" placeholder="e.g. Work" /></div>' +
+                '<div class="form-group"><label for="feed-url">Feed URL</label>' +
+                '<input type="text" id="feed-url" value="' + escHtml(feed ? feed.url : '') + '" placeholder="https://..." /></div>' +
+                '<div class="form-group"><label><input type="checkbox" id="feed-bold"' + (feed && feed.bold ? ' checked' : '') + ' /> Bold (UPPERCASE events)</label></div>' +
+                '<div class="prop-feed-modal-actions">' +
+                '<button type="button" class="btn btn-primary" id="feed-save">Save</button>' +
+                '<button type="button" class="btn btn-secondary" id="feed-cancel">Cancel</button>' +
+                '</div>';
+
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            // Focus name field
+            document.getElementById('feed-name').focus();
+
+            document.getElementById('feed-save').addEventListener('click', function () {
+                var name = document.getElementById('feed-name').value.trim();
+                var url = document.getElementById('feed-url').value.trim();
+                var bold = document.getElementById('feed-bold').checked;
+                if (!url) { document.getElementById('feed-url').focus(); return; }
+                if (!name) name = 'Calendar';
+                overlay.remove();
+                onSave({ name: name, url: url, bold: bold });
+            });
+
+            document.getElementById('feed-cancel').addEventListener('click', function () {
+                overlay.remove();
+            });
+
+            overlay.addEventListener('click', function (e) {
+                if (e.target === overlay) overlay.remove();
+            });
+        }
+
+        // Add button
+        var addBtn = document.getElementById('prop-feed-add');
+        if (addBtn) {
+            addBtn.addEventListener('click', function () {
+                showModal(null, function (feed) {
+                    var feeds = getFeeds();
+                    feeds.push(feed);
+                    saveFeeds(feeds);
+                });
+            });
+        }
+
+        // Edit buttons
+        var editBtns = feedList.querySelectorAll('.prop-feed-edit');
+        for (var i = 0; i < editBtns.length; i++) {
+            (function (btn) {
+                btn.addEventListener('click', function () {
+                    var idx = parseInt(btn.getAttribute('data-feed-idx'), 10);
+                    var feeds = getFeeds();
+                    if (idx < 0 || idx >= feeds.length) return;
+                    showModal(feeds[idx], function (updated) {
+                        feeds[idx] = updated;
+                        saveFeeds(feeds);
+                    });
+                });
+            })(editBtns[i]);
+        }
+
+        // Delete buttons
+        var delBtns = feedList.querySelectorAll('.prop-feed-delete');
+        for (var j = 0; j < delBtns.length; j++) {
+            (function (btn) {
+                btn.addEventListener('click', function () {
+                    var idx = parseInt(btn.getAttribute('data-feed-idx'), 10);
+                    var feeds = getFeeds();
+                    if (idx < 0 || idx >= feeds.length) return;
+                    feeds.splice(idx, 1);
+                    saveFeeds(feeds);
+                });
+            })(delBtns[j]);
+        }
     }
 
     function bindSteppers() {

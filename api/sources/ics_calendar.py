@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Calendar events source via ICS feed.
-Accepts ?url=ICS_URL&events=N&days=N&detail=title|location|full
-Works with any ICS feed: Outlook, Google Calendar, Apple, etc."""
+"""ICS Calendar — multi-feed calendar events source.
+Accepts ?feeds=JSON_ARRAY&events=N&days=N&detail=title|location|full
+Also accepts legacy ?url=ICS_URL for backwards compatibility."""
 import sys, os, json, time, urllib.request, urllib.parse, re, hashlib
 from datetime import datetime, timezone, timedelta
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
 CACHE_DIR = os.path.join(DATA_DIR, 'cache')
-CACHE_MAX_AGE = 60  # 5 minutes ( 1 minute for testing)
+CACHE_MAX_AGE = 60
+
 
 # Parse query parameters
 qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
-ics_url = qs.get('url', [''])[0].strip()
 max_events = int(qs.get('events', ['3'])[0])
 days_ahead = int(qs.get('days', ['1'])[0])
 detail = qs.get('detail', ['title'])[0]
@@ -43,8 +43,24 @@ def respond(data):
     sys.exit(0)
 
 
-if not ics_url:
-    respond({'value': 'No ICS URL set'})
+# ---- Build feeds list ----
+
+feeds = []
+feeds_raw = qs.get('feeds', [''])[0].strip()
+if feeds_raw:
+    try:
+        feeds = json.loads(feeds_raw)
+    except (json.JSONDecodeError, ValueError):
+        feeds = []
+
+# Backwards compat: legacy single url param
+if not feeds:
+    legacy_url = qs.get('url', [''])[0].strip()
+    if legacy_url:
+        feeds = [{'name': '', 'url': legacy_url, 'bold': False}]
+
+if not feeds:
+    respond({'value': 'No calendars configured'})
 
 
 # ---- ICS Parser ----
@@ -113,8 +129,8 @@ def calc_time_window(days):
     return now, end
 
 
-def filter_and_sort_events(events, start, end, limit):
-    """Filter events within time window, sort by start time, limit count."""
+def filter_events(events, start, end):
+    """Filter events within time window."""
     filtered = []
     for ev in events:
         dt = ev.get('dtstart')
@@ -123,8 +139,7 @@ def filter_and_sort_events(events, start, end, limit):
         ev_end = ev.get('dtend', dt)
         if ev_end >= start and dt <= end:
             filtered.append(ev)
-    filtered.sort(key=lambda e: e['dtstart'])
-    return filtered[:limit]
+    return filtered
 
 
 def truncate(text, limit):
@@ -139,6 +154,7 @@ def format_events(events, detail, max_chars):
 
     All-day events get a filled circle prefix, timed events get HH:MM.
     Lines are truncated with ... if they exceed max_chars.
+    Bold-flagged events have their summary UPPERCASED.
     Detail levels:
       title    - prefix + title
       location - prefix + title + @ location
@@ -147,6 +163,10 @@ def format_events(events, detail, max_chars):
     lines = []
     for ev in events:
         subject = ev.get('summary', 'No title')
+
+        # Bold feeds: UPPERCASE the summary
+        if ev.get('_bold'):
+            subject = subject.upper()
 
         # Prefix: all-day gets * (busy) or o (free), timed gets HH:MM
         if ev.get('all_day'):
@@ -179,26 +199,24 @@ def format_events(events, detail, max_chars):
     return '\n'.join(lines) if lines else 'No events'
 
 
-# ---- Caching ----
+# ---- Caching (per-URL) ----
 
-url_hash = hashlib.md5(ics_url.encode()).hexdigest()[:12]
-cache_file = os.path.join(CACHE_DIR, 'ical_{}.json'.format(url_hash))
-
-
-def get_cached():
+def get_cached(url):
+    url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+    cache_file = os.path.join(CACHE_DIR, 'ical_{}.json'.format(url_hash))
     if not os.path.exists(cache_file):
-        return None
+        return None, cache_file
     try:
         with open(cache_file, 'r') as f:
             cached = json.load(f)
         if time.time() - cached.get('_fetched', 0) < CACHE_MAX_AGE:
-            return cached.get('_ics_text')
+            return cached.get('_ics_text'), cache_file
     except Exception:
         pass
-    return None
+    return None, cache_file
 
 
-def save_cache(ics_text):
+def save_cache(cache_file, ics_text):
     os.makedirs(CACHE_DIR, exist_ok=True)
     try:
         with open(cache_file, 'w') as f:
@@ -207,35 +225,61 @@ def save_cache(ics_text):
         pass
 
 
-# ---- Main ----
+def fetch_ics(url):
+    """Fetch ICS text from URL with caching."""
+    ics_text, cache_file = get_cached(url)
+    if ics_text:
+        return ics_text
 
-ics_text = get_cached()
-
-if not ics_text:
     try:
-        req = urllib.request.Request(ics_url, headers={
+        req = urllib.request.Request(url, headers={
             'User-Agent': 'CrispFace/1.0'
         })
         with urllib.request.urlopen(req, timeout=10) as resp:
             ics_text = resp.read().decode('utf-8', errors='replace')
-        save_cache(ics_text)
+        save_cache(cache_file, ics_text)
+        return ics_text
     except Exception:
+        # Try stale cache on failure
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, 'r') as f:
-                    ics_text = json.load(f).get('_ics_text', '')
+                    return json.load(f).get('_ics_text', '')
             except Exception:
-                respond({'value': 'Feed unavailable'})
-        else:
-            respond({'value': 'Feed unavailable'})
+                pass
+    return None
 
-if not ics_text:
-    respond({'value': 'Feed unavailable'})
 
-events = parse_ics_events(ics_text)
+# ---- Main ----
+
 start, end = calc_time_window(days_ahead)
-events = filter_and_sort_events(events, start, end, max_events)
-value_text = format_events(events, detail, max_chars)
+all_events = []
+
+for feed in feeds:
+    url = feed.get('url', '').strip()
+    if not url:
+        continue
+    bold = feed.get('bold', False)
+
+    ics_text = fetch_ics(url)
+    if not ics_text:
+        continue
+
+    events = parse_ics_events(ics_text)
+    events = filter_events(events, start, end)
+
+    # Tag events with bold flag from this feed
+    if bold:
+        for ev in events:
+            ev['_bold'] = True
+
+    all_events.extend(events)
+
+# Sort combined events by start time and limit
+all_events.sort(key=lambda e: e['dtstart'])
+all_events = all_events[:max_events]
+
+value_text = format_events(all_events, detail, max_chars)
 
 result = {'value': value_text}
 
@@ -243,7 +287,7 @@ result = {'value': value_text}
 if alert_enabled or insistent_enabled:
     now = datetime.now(timezone.utc)
     alerts = []
-    for ev in events:
+    for ev in all_events:
         # Skip all-day events and past events
         if ev.get('all_day'):
             continue

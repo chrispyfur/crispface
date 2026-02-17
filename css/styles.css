@@ -875,6 +875,98 @@ body.simulating .canvas-container-wrapper {
     min-height: 14px;
 }
 
+/* Feeds list (calendar multi-feed UI) */
+.prop-feed-list {
+    margin-top: 4px;
+}
+
+.prop-feed-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: #f5f5f5;
+    border: 1px solid var(--gray-light);
+    border-radius: 3px;
+    margin-bottom: 4px;
+}
+
+.prop-feed-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prop-feed-bold-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--orange);
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.prop-feed-item .btn-sm {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
+.prop-feed-add {
+    width: 100%;
+    margin-top: 4px;
+}
+
+/* Feeds modal overlay */
+.prop-feed-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.prop-feed-modal-inner {
+    background: #fff;
+    border-radius: 8px;
+    padding: 24px;
+    width: 400px;
+    max-width: 90vw;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.prop-feed-modal-inner h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--gray-dark);
+}
+
+.prop-feed-modal-inner .form-group {
+    margin-bottom: 12px;
+}
+
+.prop-feed-modal-inner .form-group label {
+    font-size: 13px;
+}
+
+.prop-feed-modal-inner .form-group input[type="checkbox"] {
+    width: auto;
+    margin-right: 6px;
+}
+
+.prop-feed-modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
 /* Advanced toggle */
 .prop-advanced-toggle {
     font-size: 11px;
