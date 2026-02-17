@@ -107,14 +107,13 @@ public:
             if (diff >= 0 && diff <= 90) {
                 cfAlerts[i].fired = true;
                 if (cfAlerts[i].buzzCount == 0) {
-                    // Insistent: show notification + buzz loop
+                    // Insistent: buzz first (privacy), reveal text on button press
                     cfNotifActive = true;
-                    cfNotifInsistent = true;
                     cfNotifPreAlert = cfAlerts[i].preAlert;
                     strncpy(cfNotifText, cfAlerts[i].text, 59);
                     cfNotifText[59] = '\0';
-                    renderNotification();
                     insistentBuzzLoop();
+                    renderNotification();
                     return;
                 } else {
                     // Regular: buzz N times (1 for pre-alert, 3 for event)
