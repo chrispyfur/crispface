@@ -954,6 +954,7 @@
                 var card = document.createElement('div');
                 card.className = 'face-card' + (face.id === currentId ? ' face-card-active' : '');
                 card.setAttribute('data-face-id', face.id);
+                card.setAttribute('draggable', 'true');
 
                 var cvs = document.createElement('canvas');
                 cvs.className = 'face-card-canvas';
@@ -992,6 +993,9 @@
                     }
                 }
             });
+
+            // Enable drag-and-drop reordering
+            initFaceCardDragDrop(listEl);
         }).catch(function () {
             listEl.innerHTML = '<div class="no-selection">Failed to load faces</div>';
         });
@@ -1035,6 +1039,119 @@
         renderFacePreview(cvs.getContext('2d'), data);
         var nameEl = card.querySelector('.face-card-name');
         if (nameEl) nameEl.textContent = data.name || CF.faceId;
+    }
+
+    // Drag-and-drop reordering for face cards with FLIP animation
+    function initFaceCardDragDrop(container) {
+        var cards = container.querySelectorAll('.face-card');
+        if (cards.length < 2) return;
+
+        var dragSrc = null;
+        var didDrag = false;
+
+        // FLIP: snapshot positions before DOM move
+        function snapshotPositions(exclude) {
+            var items = container.querySelectorAll('.face-card');
+            var rects = {};
+            for (var i = 0; i < items.length; i++) {
+                if (items[i] !== exclude) {
+                    rects[items[i].getAttribute('data-face-id')] = items[i].getBoundingClientRect();
+                }
+            }
+            return rects;
+        }
+
+        // FLIP: animate from old positions to new
+        function playFlip(before) {
+            var items = container.querySelectorAll('.face-card');
+            for (var i = 0; i < items.length; i++) {
+                var el = items[i];
+                var id = el.getAttribute('data-face-id');
+                if (!before[id]) continue;
+                var after = el.getBoundingClientRect();
+                var dx = before[id].left - after.left;
+                var dy = before[id].top - after.top;
+                if (dx === 0 && dy === 0) continue;
+                el.style.transition = 'none';
+                el.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+                el.offsetHeight; // force reflow
+                el.style.transition = 'transform 200ms cubic-bezier(0.2, 0, 0, 1)';
+                el.style.transform = '';
+            }
+        }
+
+        for (var i = 0; i < cards.length; i++) {
+            (function (card) {
+                card.addEventListener('dragstart', function (e) {
+                    dragSrc = card;
+                    didDrag = false;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', '');
+                    setTimeout(function () { card.classList.add('dragging'); }, 0);
+                });
+
+                card.addEventListener('dragend', function () {
+                    card.classList.remove('dragging');
+                    if (dragSrc && didDrag) {
+                        saveFaceCardOrder();
+                    }
+                    // Block click from firing after drag
+                    if (didDrag) {
+                        card.addEventListener('click', function suppress(e) {
+                            e.stopImmediatePropagation();
+                            card.removeEventListener('click', suppress, true);
+                        }, true);
+                    }
+                    dragSrc = null;
+                });
+
+                card.addEventListener('dragover', function (e) {
+                    if (!dragSrc || dragSrc === card) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+
+                    var rect = card.getBoundingClientRect();
+                    var midY = rect.top + rect.height / 2;
+                    var insertBefore = e.clientY < midY ? card : card.nextSibling;
+
+                    // Only move if position actually changes
+                    if (insertBefore === dragSrc || insertBefore === dragSrc.nextSibling) return;
+
+                    didDrag = true;
+                    var rects = snapshotPositions(dragSrc);
+                    container.insertBefore(dragSrc, insertBefore);
+                    playFlip(rects);
+                });
+
+                card.addEventListener('drop', function (e) {
+                    e.preventDefault();
+                });
+            })(cards[i]);
+        }
+    }
+
+    // Persist face card order after drag
+    function saveFaceCardOrder() {
+        var container = document.getElementById('face-card-list');
+        if (!container) return;
+        var cards = container.querySelectorAll('.face-card[data-face-id]');
+        var newOrder = [];
+        for (var i = 0; i < cards.length; i++) {
+            newOrder.push(cards[i].getAttribute('data-face-id'));
+        }
+
+        var urlParams = new URLSearchParams(window.location.search);
+        var watchParam = urlParams.get('watch') || '';
+
+        if (watchParam) {
+            // Watch-scoped: save face_ids order to the watch
+            CF.api('POST', '/api/watch.py?id=' + watchParam, { face_ids: newOrder });
+        } else {
+            // No watch: update sort_order on each face
+            for (var j = 0; j < newOrder.length; j++) {
+                CF.api('POST', '/api/face.py?id=' + newOrder[j], { sort_order: j });
+            }
+        }
     }
 
     // Serialize canvas to spec-format JSON

@@ -596,6 +596,18 @@ body.editor-page .main-content {
     border-width: 2px;
 }
 
+.face-card-list .face-card.dragging {
+    opacity: 0.3;
+}
+
+.face-card-list .face-card[draggable="true"] {
+    cursor: grab;
+}
+
+.face-card-list .face-card[draggable="true"]:active {
+    cursor: grabbing;
+}
+
 .face-card-canvas {
     display: block;
     width: 80%;
