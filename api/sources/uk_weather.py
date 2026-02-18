@@ -152,7 +152,7 @@ try:
     refresh_mins = int(qs.get('refresh', ['30'])[0])
 except ValueError:
     refresh_mins = 30
-cache_max_age = max(5, refresh_mins) * 60  # minimum 5 minutes, convert to seconds
+cache_max_age = max(1, refresh_mins) * 60  # minimum 1 minute, convert to seconds
 
 # Validate
 if not apikey:

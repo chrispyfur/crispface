@@ -595,7 +595,7 @@ private:
             }
 
             int count = 0;
-            int maxServerStale = 0;
+            int minServerStale = 86400;
             bool anyServerComp = false;
 
             for (JsonObject face : faces) {
@@ -616,7 +616,7 @@ private:
                             int s = comp["stale"] | 600;
                             if (s > 0) {
                                 anyServerComp = true;
-                                if (s > maxServerStale) maxServerStale = s;
+                                if (s < minServerStale) minServerStale = s;
                             }
                         }
                     }
@@ -629,7 +629,7 @@ private:
             cfFaceCount    = count;
             // If no server complications need refreshing, sync once a day
             // (user can always manual-sync via top-left button)
-            cfSyncInterval = anyServerComp ? (maxServerStale > 300 ? maxServerStale : 300) : 86400;
+            cfSyncInterval = anyServerComp ? (minServerStale > 60 ? minServerStale : 60) : 86400;
             cfLastSync     = (int)makeTime(currentTime);
 
             // Collect alerts from all faces — two per event (pre-alert + event-time)
