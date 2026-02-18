@@ -598,9 +598,11 @@ body.editor-page .main-content {
 
 .face-card-canvas {
     display: block;
-    width: 100%;
+    width: 80%;
     height: auto;
-    border-radius: 5px 5px 0 0;
+    margin: 8px auto 4px;
+    border: 4px solid #333;
+    border-radius: 8px;
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;
     image-rendering: crisp-edges;
@@ -610,12 +612,11 @@ body.editor-page .main-content {
     font-size: 11px;
     font-weight: 500;
     color: var(--gray-dark);
-    padding: 4px 8px;
+    padding: 2px 8px 6px;
     text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    border-top: 1px solid var(--gray-light);
 }
 
 /* Face settings accordion toggle */
