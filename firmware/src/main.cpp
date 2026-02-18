@@ -1130,8 +1130,9 @@ private:
                 int ly = curY - ascent + 1;
                 if (ly >= by && ly < by + bh) {
                     display.drawLine(lx, ly, lx + lineW - 1, ly, color);
+                    display.drawLine(lx, ly + 1, lx + lineW - 1, ly + 1, color);
                 }
-                curY += 3;  // 1px pad + 1px line + 1px pad
+                curY += 6;  // 1px pad + 2px line + 3px pad
                 firstLine = false;
                 continue;
             }
@@ -1252,8 +1253,9 @@ private:
                 int ly = curY - ascent + 1;
                 if (ly >= by && ly < by + bh) {
                     display.drawLine(lx, ly, lx + lineW - 1, ly, color);
+                    display.drawLine(lx, ly + 1, lx + lineW - 1, ly + 1, color);
                 }
-                curY += 3;  // 1px pad + 1px line + 1px pad
+                curY += 6;  // 1px pad + 2px line + 3px pad
                 firstLine = false;
                 continue;
             }
