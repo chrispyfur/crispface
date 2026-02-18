@@ -69,7 +69,7 @@ def create_face(name, user):
         'id': face_id,
         'slug': _slugify(name),
         'name': name,
-        'background': 'black',
+        'background': 'white',
         'controls': [],
         'complications': [],
         'sort_order': max_order + 1,

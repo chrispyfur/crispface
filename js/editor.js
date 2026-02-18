@@ -905,7 +905,7 @@
     }
 
     // Load face list as thumbnail cards in the sidebar
-    function loadFaceCards(currentId) {
+    function loadFaceCards(currentId, animateNew) {
         var listEl = document.getElementById('face-card-list');
         if (!listEl) return;
 
@@ -953,6 +953,9 @@
                 var face = faces[i];
                 var card = document.createElement('div');
                 card.className = 'face-card' + (face.id === currentId ? ' face-card-active' : '');
+                if (animateNew && face.id === currentId) {
+                    card.classList.add('face-card-enter');
+                }
                 card.setAttribute('data-face-id', face.id);
                 card.setAttribute('draggable', 'true');
 
@@ -1735,7 +1738,7 @@
         window.CRISPFACE.refreshSidebarIntervals = refreshSidebarIntervals;
     }
 
-    // Add a new face below the currently selected face
+    // Add a new face, inserted after current or at top if none selected
     function addNewFace() {
         var watchId = new URLSearchParams(window.location.search).get('watch') || CF.currentWatchId || '';
         CF.api('POST', '/api/faces.py', { name: 'Untitled Face' }).then(function (data) {
@@ -1743,25 +1746,36 @@
             var newFaceId = data.face.id;
 
             if (!watchId) {
-                // No watch context — just open the new face
                 switchToFace(newFaceId);
                 loadFaceCards(newFaceId);
                 return;
             }
 
-            // Insert into watch face_ids after the current face
             CF.api('GET', '/api/watch.py?id=' + watchId).then(function (wr) {
                 if (!wr.success || !wr.watch) return;
                 var ids = wr.watch.face_ids || [];
-                var currentIdx = ids.indexOf(CF.faceId);
+                var currentIdx = CF.faceId ? ids.indexOf(CF.faceId) : -1;
                 if (currentIdx >= 0) {
                     ids.splice(currentIdx + 1, 0, newFaceId);
                 } else {
-                    ids.push(newFaceId);
+                    // No face selected — insert at top
+                    ids.unshift(newFaceId);
                 }
                 CF.api('POST', '/api/watch.py?id=' + watchId, { face_ids: ids }).then(function () {
-                    switchToFace(newFaceId);
-                    loadFaceCards(newFaceId);
+                    loadFaceCards(newFaceId, true);
+                    // Boot editor if not yet initialised, otherwise switch
+                    if (!CF.faceId) {
+                        CF.api('GET', '/api/face.py?id=' + newFaceId).then(function (resp) {
+                            if (!resp.success || !resp.face) return;
+                            var params = new URLSearchParams(window.location.search);
+                            params.set('id', newFaceId);
+                            params.set('watch', watchId);
+                            history.replaceState(null, '', '?' + params.toString());
+                            bootEditor(resp.face, newFaceId);
+                        });
+                    } else {
+                        switchToFace(newFaceId);
+                    }
                 });
             });
         });
