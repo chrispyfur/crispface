@@ -641,6 +641,18 @@
         return Math.round(mins / 1440) + 'd';
     }
 
+    // Rebuild refresh list from live canvas objects
+    function refreshSidebarIntervals() {
+        var objects = canvas.getObjects();
+        var comps = [];
+        for (var i = 0; i < objects.length; i++) {
+            var d = objects[i].crispfaceData;
+            if (!d) continue;
+            comps.push(d);
+        }
+        updateRefreshList({ complications: comps });
+    }
+
     // Show each complication's refresh interval in the sidebar
     function updateRefreshList(face) {
         var listEl = document.getElementById('face-refresh-list');
@@ -1203,6 +1215,7 @@
             if (source && newObj.crispfaceData) {
                 pollSource(newObj);
             }
+            refreshSidebarIntervals();
         });
 
         document.getElementById('btn-delete').addEventListener('click', function () {
@@ -1213,6 +1226,7 @@
                 canvas.discardActiveObject();
                 canvas.requestRenderAll();
                 window.dispatchEvent(new CustomEvent('crispface:deselect'));
+                refreshSidebarIntervals();
             }
         });
 
@@ -1236,6 +1250,7 @@
                     canvas.discardActiveObject();
                     canvas.requestRenderAll();
                     window.dispatchEvent(new CustomEvent('crispface:deselect'));
+                    refreshSidebarIntervals();
                     e.preventDefault();
                 }
             }
@@ -1290,6 +1305,7 @@
                 window.CRISPFACE.syncBackground = syncBackground;
                 window.CRISPFACE.findType = findType;
                 window.CRISPFACE.repollSource = repollSource;
+                window.CRISPFACE.refreshSidebarIntervals = refreshSidebarIntervals;
             }).catch(function () {
                 alert('Failed to load face');
                 window.location.href = CF.baseUrl + '/faces.html';

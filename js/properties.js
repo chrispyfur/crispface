@@ -361,6 +361,7 @@
                         // Sync refresh variable to refresh_interval
                         if (varName === 'refresh') {
                             currentObject.crispfaceData.refresh_interval = parseInt(val, 10) || 30;
+                            if (CF.refreshSidebarIntervals) CF.refreshSidebarIntervals();
                         }
                         // For "text" type, the text variable IS the display value
                         if (compTypeId === 'text' && varName === 'text') {
