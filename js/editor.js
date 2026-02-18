@@ -1727,14 +1727,22 @@
                 loadComplicationTypes();
                 loadFaceCards(faceId);
 
-                // Face settings accordion toggle
+                // Face settings cog toggle
                 var fsToggle = document.getElementById('face-settings-toggle');
                 var fsBody = document.getElementById('face-settings-body');
                 if (fsToggle && fsBody) {
-                    fsToggle.addEventListener('click', function () {
+                    fsToggle.addEventListener('click', function (e) {
+                        e.stopPropagation();
                         var open = fsBody.style.display !== 'none';
                         fsBody.style.display = open ? 'none' : '';
                         fsToggle.classList.toggle('face-settings-open', !open);
+                    });
+                    // Close panel when clicking outside
+                    document.addEventListener('click', function (e) {
+                        if (fsBody.style.display !== 'none' && !fsBody.contains(e.target) && e.target !== fsToggle) {
+                            fsBody.style.display = 'none';
+                            fsToggle.classList.remove('face-settings-open');
+                        }
                     });
                 }
 

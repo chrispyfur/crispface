@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Editor - CrispFace</title>
-    <link rel="stylesheet" href="/crispface/css/styles.css?v=8" />
+    <link rel="stylesheet" href="/crispface/css/styles.css?v=9" />
 </head>
 <body class="editor-page" data-page="editor">
 <div class="layout">
@@ -36,22 +36,24 @@
                 <div class="face-card-list" id="face-card-list">
                     <div class="no-selection">Loading...</div>
                 </div>
-                <div class="face-settings-toggle" id="face-settings-toggle">Face Settings</div>
-                <div class="face-settings-body" id="face-settings-body" style="display:none">
-                    <div class="prop-row">
-                        <label for="face-name">Name</label>
-                        <input type="text" id="face-name" value="" />
-                    </div>
-                    <div class="prop-row">
-                        <label for="face-background">Background</label>
-                        <select id="face-background">
-                            <option value="black">Black</option>
-                            <option value="white">White</option>
-                        </select>
-                    </div>
-                    <div class="prop-row">
-                        <label>Refresh intervals</label>
-                        <div id="face-refresh-list" class="refresh-list"><span class="no-selection">No complications</span></div>
+                <div class="face-settings-anchor">
+                    <button type="button" class="face-settings-cog" id="face-settings-toggle" title="Face Settings">&#9881;</button>
+                    <div class="face-settings-body" id="face-settings-body" style="display:none">
+                        <div class="prop-row">
+                            <label for="face-name">Name</label>
+                            <input type="text" id="face-name" value="" />
+                        </div>
+                        <div class="prop-row">
+                            <label for="face-background">Background</label>
+                            <select id="face-background">
+                                <option value="black">Black</option>
+                                <option value="white">White</option>
+                            </select>
+                        </div>
+                        <div class="prop-row">
+                            <label>Refresh intervals</label>
+                            <div id="face-refresh-list" class="refresh-list"><span class="no-selection">No complications</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -85,7 +87,7 @@
 
 <script src="/crispface/js/app.js?v=3"></script>
 <script src="/crispface/js/fabric.min.js"></script>
-<script src="/crispface/js/editor.js?v=24"></script>
+<script src="/crispface/js/editor.js?v=25"></script>
 <script src="/crispface/js/properties.js?v=17"></script>
 </body>
 </html>
