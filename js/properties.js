@@ -700,11 +700,13 @@
                 var alertMode = document.getElementById('feed-alert-mode').value;
                 if (!url) { document.getElementById('feed-url').focus(); return; }
                 if (!name) name = 'Calendar';
+                var refresh = parseInt(document.getElementById('feed-refresh').value);
+                var alertBefore = parseInt(document.getElementById('feed-alert-before').value);
                 overlay.remove();
-                var feedData = { name: name, url: url, bold: bold, refresh: parseInt(document.getElementById('feed-refresh').value) };
+                var feedData = { name: name, url: url, bold: bold, refresh: refresh };
                 if (alertMode !== 'none') {
                     feedData.alert_mode = alertMode;
-                    feedData.alert_before = parseInt(document.getElementById('feed-alert-before').value);
+                    feedData.alert_before = alertBefore;
                 }
                 onSave(feedData);
             });
