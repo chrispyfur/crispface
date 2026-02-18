@@ -1123,16 +1123,27 @@ private:
 
             const char* linePtr = line.c_str();
 
-            // Day divider: \x04 byte renders as centered horizontal line
+            // Day divider: \x04 byte renders as ornamental ———◆——— divider
             if ((uint8_t)linePtr[0] == 0x04 && strlen(linePtr) <= 1) {
                 int lineW = bw < 120 ? bw : 120;
                 int lx = bx + (bw - lineW) / 2;
                 int ly = curY - ascent + 1;
-                if (ly >= by && ly < by + bh) {
-                    display.drawLine(lx, ly, lx + lineW - 1, ly, color);
-                    display.drawLine(lx, ly + 1, lx + lineW - 1, ly + 1, color);
+                if (ly >= by && ly + 2 < by + bh) {
+                    int cx = lx + lineW / 2;
+                    int cy = ly + 1;
+                    // Diamond: 3px tall centred ornament
+                    display.drawPixel(cx, ly, color);
+                    display.drawPixel(cx - 1, cy, color);
+                    display.drawPixel(cx, cy, color);
+                    display.drawPixel(cx + 1, cy, color);
+                    display.drawPixel(cx, ly + 2, color);
+                    // Lines on the middle row with 3px gap either side
+                    if (cx - 4 >= lx)
+                        display.drawLine(lx, cy, cx - 4, cy, color);
+                    if (cx + 4 <= lx + lineW - 1)
+                        display.drawLine(cx + 4, cy, lx + lineW - 1, cy, color);
                 }
-                curY += 6;  // 1px pad + 2px line + 3px pad
+                curY += 5;  // 1px pad + 3px ornament + 1px pad
                 firstLine = false;
                 continue;
             }
@@ -1246,16 +1257,27 @@ private:
 
             const char* linePtr = line.c_str();
 
-            // Day divider: \x04 byte renders as centered horizontal line
+            // Day divider: \x04 byte renders as ornamental ———◆——— divider
             if ((uint8_t)linePtr[0] == 0x04 && strlen(linePtr) <= 1) {
                 int lineW = bw < 120 ? bw : 120;
                 int lx = bx + (bw - lineW) / 2;
                 int ly = curY - ascent + 1;
-                if (ly >= by && ly < by + bh) {
-                    display.drawLine(lx, ly, lx + lineW - 1, ly, color);
-                    display.drawLine(lx, ly + 1, lx + lineW - 1, ly + 1, color);
+                if (ly >= by && ly + 2 < by + bh) {
+                    int cx = lx + lineW / 2;
+                    int cy = ly + 1;
+                    // Diamond: 3px tall centred ornament
+                    display.drawPixel(cx, ly, color);
+                    display.drawPixel(cx - 1, cy, color);
+                    display.drawPixel(cx, cy, color);
+                    display.drawPixel(cx + 1, cy, color);
+                    display.drawPixel(cx, ly + 2, color);
+                    // Lines on the middle row with 3px gap either side
+                    if (cx - 4 >= lx)
+                        display.drawLine(lx, cy, cx - 4, cy, color);
+                    if (cx + 4 <= lx + lineW - 1)
+                        display.drawLine(cx + 4, cy, lx + lineW - 1, cy, color);
                 }
-                curY += 6;  // 1px pad + 2px line + 3px pad
+                curY += 5;  // 1px pad + 3px ornament + 1px pad
                 firstLine = false;
                 continue;
             }
