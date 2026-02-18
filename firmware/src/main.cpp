@@ -1390,8 +1390,13 @@ private:
         display.setFont(&FreeSans9pt7b);
         const char* title = "CrispFace v" CRISPFACE_VERSION;
         display.getTextBounds(title, 0, 0, &tx, &ty, &tw, &th);
-        display.setCursor((200 - (int)tw) / 2, 40);
+        display.setCursor((200 - (int)tw) / 2, 35);
         display.print(title);
+
+        const char* subtitle = "Open Source Smartwatch";
+        display.getTextBounds(subtitle, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 55);
+        display.print(subtitle);
 
         // Time
         display.setFont(&FreeSans24pt7b);
@@ -1399,7 +1404,7 @@ private:
         snprintf(tbuf, sizeof(tbuf), "%02d:%02d",
                  currentTime.Hour, currentTime.Minute);
         display.getTextBounds(tbuf, 0, 0, &tx, &ty, &tw, &th);
-        display.setCursor((200 - (int)tw) / 2, 110);
+        display.setCursor((200 - (int)tw) / 2, 115);
         display.print(tbuf);
 
         // Status
