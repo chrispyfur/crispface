@@ -17,6 +17,7 @@ RTC_DATA_ATTR int  cfSyncInterval = 600; // seconds between server syncs
 RTC_DATA_ATTR bool cfNeedsSync   = true;  // sync on first boot
 RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
 RTC_DATA_ATTR bool cfTimeSeeded   = false; // set after build-epoch seed or NTP sync
+RTC_DATA_ATTR int  cfWakeCount    = 0;     // total wake cycles (for debug)
 
 // ---- Alert system ----
 struct CfAlert {
@@ -41,6 +42,8 @@ public:
     CrispFace(const watchySettings &s) : Watchy(s) {}
 
     void drawWatchFace() {
+        cfWakeCount++;
+
         // Mount SPIFFS every wake — it's unmounted after deep sleep
         if (!SPIFFS.begin(true)) {
             display.fillScreen(GxEPD_WHITE);
@@ -1047,7 +1050,7 @@ private:
             return String(buf);
         }
         if (strcmp(type, "version") == 0) {
-            return String("v" CRISPFACE_VERSION);
+            return String("v" CRISPFACE_VERSION " w") + String(cfWakeCount);
         }
         if (strcmp(type, "date") == 0) {
             static const char* days[] =
