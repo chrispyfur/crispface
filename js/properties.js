@@ -603,6 +603,14 @@
             if (!currentObject || !currentObject.crispfaceData) return;
             if (!currentObject.crispfaceData.params) currentObject.crispfaceData.params = {};
             currentObject.crispfaceData.params[varName] = JSON.stringify(feeds);
+            // Set refresh_interval to minimum across all feeds
+            var minRefresh = 30;
+            for (var fi = 0; fi < feeds.length; fi++) {
+                var fr = feeds[fi].refresh || 30;
+                if (fr < minRefresh) minRefresh = fr;
+            }
+            currentObject.crispfaceData.refresh_interval = minRefresh;
+            if (CF.refreshSidebarIntervals) CF.refreshSidebarIntervals();
             // Re-render properties to update the list
             if (CF.repollSource && currentObject.crispfaceData.source) {
                 CF.repollSource(currentObject);
@@ -635,6 +643,7 @@
 
             var feedAlertSel = feed ? (feed.alert_mode || (feed.insistent ? 'insistent' : (feed.alert ? 'gentle' : 'none'))) : 'none';
             var alertBeforeSel = feed && feed.alert_before ? feed.alert_before : 5;
+            var refreshSel = feed && feed.refresh ? feed.refresh : 30;
 
             var card = document.createElement('div');
             card.className = 'prop-feed-modal-inner';
@@ -645,6 +654,14 @@
                 '<div class="form-group"><label for="feed-url">Feed URL</label>' +
                 '<input type="text" id="feed-url" value="' + escHtml(feed ? feed.url : '') + '" placeholder="https://..." /></div>' +
                 '<div class="form-group"><label><input type="checkbox" id="feed-bold"' + (feed && feed.bold ? ' checked' : '') + ' /> Bold</label></div>' +
+                '<div class="form-group"><label for="feed-refresh">Refresh</label>' +
+                '<select id="feed-refresh">' +
+                '<option value="1"' + (refreshSel === 1 ? ' selected' : '') + '>1 minute</option>' +
+                '<option value="5"' + (refreshSel === 5 ? ' selected' : '') + '>5 minutes</option>' +
+                '<option value="15"' + (refreshSel === 15 ? ' selected' : '') + '>15 minutes</option>' +
+                '<option value="30"' + (refreshSel === 30 ? ' selected' : '') + '>30 minutes</option>' +
+                '<option value="60"' + (refreshSel === 60 ? ' selected' : '') + '>1 hour</option>' +
+                '</select></div>' +
                 '<div class="form-group"><label for="feed-alert-mode">Alert</label>' +
                 '<select id="feed-alert-mode">' +
                 '<option value="none"' + (feedAlertSel === 'none' ? ' selected' : '') + '>None</option>' +
@@ -684,7 +701,7 @@
                 if (!url) { document.getElementById('feed-url').focus(); return; }
                 if (!name) name = 'Calendar';
                 overlay.remove();
-                var feedData = { name: name, url: url, bold: bold };
+                var feedData = { name: name, url: url, bold: bold, refresh: parseInt(document.getElementById('feed-refresh').value) };
                 if (alertMode !== 'none') {
                     feedData.alert_mode = alertMode;
                     feedData.alert_before = parseInt(document.getElementById('feed-alert-before').value);
