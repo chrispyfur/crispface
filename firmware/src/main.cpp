@@ -17,6 +17,7 @@ RTC_DATA_ATTR int  cfSyncInterval = 600; // seconds between server syncs
 RTC_DATA_ATTR bool cfNeedsSync   = true;  // sync on first boot
 RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
 RTC_DATA_ATTR bool cfTimeSeeded   = false; // set after build-epoch seed or NTP sync
+RTC_DATA_ATTR bool cfFirstBoot    = true;  // true until first successful sync
 
 // ---- Alert system ----
 struct CfAlert {
@@ -84,6 +85,26 @@ public:
             }
             if (cfFaceCount > 0) cfNeedsSync = false;
         }
+
+        // First boot: show boot screen before attempting sync
+        if (cfFirstBoot && cfFaceCount == 0) {
+            renderBootScreen();
+            syncFromServer();
+            cfNeedsSync = false;
+            cfFirstBoot = false;
+            RTC.read(currentTime);
+            // Fall through to render the first synced face
+            if (cfFaceCount > 0) {
+                cfFaceIndex = 0;
+                char path[32];
+                snprintf(path, sizeof(path), "/face_%d.json", cfFaceIndex);
+                renderFace(path);
+            } else {
+                renderFallback();
+            }
+            return;
+        }
+        cfFirstBoot = false;
 
         // Insistent notification: buzz first (privacy), then show text on button press
         if (cfNotifActive && cfNotifInsistent) {
@@ -1355,7 +1376,43 @@ private:
         }
     }
 
-    // ---- Fallback screen ----
+    // ---- Boot screen (first boot only, before first sync) ----
+
+    void renderBootScreen() {
+        display.setFullWindow();
+        display.fillScreen(GxEPD_BLACK);
+        display.setTextColor(GxEPD_WHITE);
+
+        int16_t tx, ty;
+        uint16_t tw, th;
+
+        // Title
+        display.setFont(&FreeSans9pt7b);
+        const char* title = "CrispFace v" CRISPFACE_VERSION;
+        display.getTextBounds(title, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 40);
+        display.print(title);
+
+        // Time
+        display.setFont(&FreeSans24pt7b);
+        char tbuf[6];
+        snprintf(tbuf, sizeof(tbuf), "%02d:%02d",
+                 currentTime.Hour, currentTime.Minute);
+        display.getTextBounds(tbuf, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 110);
+        display.print(tbuf);
+
+        // Status
+        display.setFont(&FreeSans9pt7b);
+        const char* l1 = "Syncing...";
+        display.getTextBounds(l1, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 170);
+        display.print(l1);
+
+        display.display(true); // partial refresh to show immediately
+    }
+
+    // ---- Fallback screen (no faces after sync) ----
 
     void renderFallback() {
         display.setFullWindow();
