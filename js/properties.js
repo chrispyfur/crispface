@@ -169,13 +169,6 @@
                 html += '<input type="text" id="prop-params" value="' + escHtml(paramsStr) + '" placeholder="e.g. city=derby" /></div>';
             }
 
-            // Preview value — hide for "text" type since the variable IS the preview
-            var isTextType = d.complication_type === 'text';
-            if (!isTextType) {
-                html += '<div class="prop-row"><label for="prop-value">Preview</label>';
-                html += '<input type="text" id="prop-value" value="' + escHtml(content.value || '') + '" /></div>';
-            }
-
             // Font family + size
             html += '<div class="prop-section-label">Text Style</div>';
             html += '<div class="prop-row-inline">';
@@ -448,15 +441,6 @@
                 }
             });
         }
-
-        // Preview value
-        bindInput('prop-value', function (val) {
-            if (currentObject.crispfaceData) {
-                currentObject.crispfaceData.content.value = val;
-                currentObject.dirty = true;
-                CF.canvas.renderAll();
-            }
-        });
 
         // Font family
         bindInput('prop-family', function (val) {
