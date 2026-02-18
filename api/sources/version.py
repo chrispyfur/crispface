@@ -16,4 +16,4 @@ except Exception:
 
 print('Content-Type: application/json')
 print()
-print(json.dumps({'value': 'v' + version + ' w0'}))
+print(json.dumps({'value': 'v' + version}))
