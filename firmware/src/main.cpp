@@ -1164,7 +1164,7 @@ private:
                     if (cx + 4 <= lx + lineW - 1)
                         display.drawLine(cx + 4, cy, lx + lineW - 1, cy, color);
                 }
-                curY += 5;  // 1px pad + 3px ornament + 1px pad
+                curY += 7;  // 1px pad + 3px ornament + 3px pad
                 firstLine = false;
                 continue;
             }
@@ -1298,7 +1298,7 @@ private:
                     if (cx + 4 <= lx + lineW - 1)
                         display.drawLine(cx + 4, cy, lx + lineW - 1, cy, color);
                 }
-                curY += 5;  // 1px pad + 3px ornament + 1px pad
+                curY += 7;  // 1px pad + 3px ornament + 3px pad
                 firstLine = false;
                 continue;
             }

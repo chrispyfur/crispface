@@ -468,7 +468,7 @@
                                 ctx.fillRect(dlx, dcy, dcx - 4 - dlx + 1, 1);
                             if (dcx + 4 <= dlx + divW - 1)
                                 ctx.fillRect(dcx + 4, dcy, dlx + divW - 1 - (dcx + 4) + 1, 1);
-                            curY += 5;
+                            curY += 7;
                             continue;
                         }
 
