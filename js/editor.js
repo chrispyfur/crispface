@@ -1728,6 +1728,38 @@
             });
         }
 
+        // Delete face button
+        var delBtn = document.getElementById('btn-delete-face');
+        if (delBtn) {
+            delBtn.addEventListener('click', function () {
+                if (!CF.faceId) return;
+                if (!confirm('Delete this face?')) return;
+                var watchId = new URLSearchParams(window.location.search).get('watch') || CF.currentWatchId || '';
+                CF.api('DELETE', '/api/face.py?id=' + CF.faceId).then(function (resp) {
+                    if (!resp.success) return;
+                    // Close the settings panel
+                    if (fsBody) fsBody.style.display = 'none';
+                    if (fsToggle) fsToggle.classList.remove('face-settings-open');
+                    // Switch to another face or show empty state
+                    if (watchId) {
+                        CF.api('GET', '/api/watch.py?id=' + watchId).then(function (wr) {
+                            if (!wr.success || !wr.watch) return;
+                            var ids = wr.watch.face_ids || [];
+                            if (ids.length > 0) {
+                                CF.faceId = null;
+                                switchToFace(ids[0]);
+                                loadFaceCards(ids[0]);
+                            } else {
+                                window.location.href = CF.baseUrl + '/editor.html?watch=' + watchId;
+                            }
+                        });
+                    } else {
+                        window.location.href = CF.baseUrl + '/editor.html';
+                    }
+                });
+            });
+        }
+
         // Expose for properties.js and debugging
         window.CRISPFACE.canvas = canvas;
         window.CRISPFACE.createTextComplication = createTextComplication;
