@@ -1393,10 +1393,15 @@ private:
         display.setCursor((200 - (int)tw) / 2, 35);
         display.print(title);
 
-        const char* subtitle = "Open Source Smartwatch";
-        display.getTextBounds(subtitle, 0, 0, &tx, &ty, &tw, &th);
-        display.setCursor((200 - (int)tw) / 2, 55);
-        display.print(subtitle);
+        const char* sub1 = "Open Source";
+        display.getTextBounds(sub1, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 53);
+        display.print(sub1);
+
+        const char* sub2 = "Smartwatch";
+        display.getTextBounds(sub2, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 71);
+        display.print(sub2);
 
         // Time
         display.setFont(&FreeSans24pt7b);
