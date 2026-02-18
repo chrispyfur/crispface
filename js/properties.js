@@ -122,7 +122,6 @@
                             if (feedAlertMode === 'gentle') html += '<span class="prop-feed-alert-badge">ALERT</span>';
                             if (feedAlertMode === 'insistent') html += '<span class="prop-feed-alert-badge">ALERT!</span>';
                             html += '<button type="button" class="prop-feed-edit btn btn-sm btn-secondary" data-feed-idx="' + fi + '">Edit</button>';
-                            html += '<button type="button" class="prop-feed-delete btn btn-sm btn-danger" data-feed-idx="' + fi + '">Del</button>';
                             html += '</div>';
                         }
                         html += '<button type="button" class="prop-feed-add btn btn-sm btn-primary" id="prop-feed-add">+ Add Calendar</button>';
@@ -588,6 +587,47 @@
 
     }
 
+    // ---- Watch feeds cache ----
+    var _watchFeedsCache = null;
+    var _watchFeedsCacheTime = 0;
+    var WATCH_FEEDS_CACHE_TTL = 30000; // 30 seconds
+
+    function getWatchId() {
+        var params = new URLSearchParams(window.location.search);
+        return params.get('watch') || localStorage.getItem('crispface_current_watch') || '';
+    }
+
+    function getWatchFeeds(callback) {
+        var watchId = getWatchId();
+        if (!watchId) { callback(null); return; }
+        var now = Date.now();
+        if (_watchFeedsCache && (now - _watchFeedsCacheTime) < WATCH_FEEDS_CACHE_TTL) {
+            callback(_watchFeedsCache);
+            return;
+        }
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/crispface/api/watch_feeds.py?watch_id=' + encodeURIComponent(watchId));
+        xhr.onload = function () {
+            try {
+                var resp = JSON.parse(xhr.responseText);
+                if (resp.success) {
+                    _watchFeedsCache = resp.feeds;
+                    _watchFeedsCacheTime = Date.now();
+                    callback(resp.feeds);
+                } else {
+                    callback(null);
+                }
+            } catch (e) { callback(null); }
+        };
+        xhr.onerror = function () { callback(null); };
+        xhr.send();
+    }
+
+    function invalidateWatchFeedsCache() {
+        _watchFeedsCache = null;
+        _watchFeedsCacheTime = 0;
+    }
+
     function bindFeeds(ctype) {
         var feedList = document.getElementById('prop-feed-list');
         if (!feedList) return;
@@ -615,6 +655,7 @@
             if (CF.repollSource && currentObject.crispfaceData.source) {
                 CF.repollSource(currentObject);
             }
+            invalidateWatchFeedsCache();
             // Re-fire selection to refresh the properties panel
             if (currentObject) {
                 var d = currentObject.crispfaceData;
@@ -633,7 +674,7 @@
             }
         }
 
-        function showModal(feed, onSave) {
+        function showModal(feed, onSave, onDelete) {
             var existing = document.getElementById('prop-feed-modal');
             if (existing) existing.remove();
 
@@ -678,6 +719,10 @@
                 '<div class="prop-feed-modal-actions">' +
                 '<button type="button" class="btn btn-primary" id="feed-save">Save</button>' +
                 '<button type="button" class="btn btn-secondary" id="feed-cancel">Cancel</button>' +
+                '</div>' +
+                '<div class="prop-feed-modal-danger" id="feed-danger-zone" style="display:none">' +
+                '<button type="button" id="feed-delete">Remove from this complication</button>' +
+                '<button type="button" id="feed-delete-all" style="display:none">Remove from all</button>' +
                 '</div>';
 
             overlay.appendChild(card);
@@ -685,6 +730,34 @@
 
             // Focus name field
             document.getElementById('feed-name').focus();
+
+            // Show danger zone when editing an existing feed
+            if (onDelete && feed) {
+                document.getElementById('feed-danger-zone').style.display = '';
+                document.getElementById('feed-delete').addEventListener('click', function () {
+                    overlay.remove();
+                    onDelete('single');
+                });
+
+                // Check watch feeds for usage count
+                var feedUrl = feed.url;
+                getWatchFeeds(function (watchFeeds) {
+                    var dangerZone = document.getElementById('feed-danger-zone');
+                    if (!dangerZone || !watchFeeds) return;
+                    var entry = watchFeeds[feedUrl];
+                    if (entry && entry.count > 1) {
+                        var delAllBtn = document.getElementById('feed-delete-all');
+                        if (delAllBtn) {
+                            delAllBtn.textContent = 'Remove from all (' + entry.count + ' complications)';
+                            delAllBtn.style.display = '';
+                            delAllBtn.addEventListener('click', function () {
+                                overlay.remove();
+                                onDelete('all', feedUrl);
+                            });
+                        }
+                    }
+                });
+            }
 
             // Toggle alert-before visibility when alert mode changes
             document.getElementById('feed-alert-mode').addEventListener('change', function() {
@@ -732,7 +805,7 @@
             });
         }
 
-        // Edit buttons
+        // Edit buttons — with delete moved into modal
         var editBtns = feedList.querySelectorAll('.prop-feed-edit');
         for (var i = 0; i < editBtns.length; i++) {
             (function (btn) {
@@ -743,24 +816,97 @@
                     showModal(feeds[idx], function (updated) {
                         feeds[idx] = updated;
                         saveFeeds(feeds);
+                    }, function (action, feedUrl) {
+                        if (action === 'all' && feedUrl) {
+                            // Remove from all complications via API
+                            var watchId = getWatchId();
+                            if (!watchId) return;
+                            var xhr = new XMLHttpRequest();
+                            xhr.open('POST', '/crispface/api/watch_feeds.py?watch_id=' + encodeURIComponent(watchId));
+                            xhr.setRequestHeader('Content-Type', 'application/json');
+                            xhr.onload = function () {
+                                invalidateWatchFeedsCache();
+                                // Also remove from local feeds
+                                var feeds = getFeeds();
+                                feeds = feeds.filter(function (f) { return f.url !== feedUrl; });
+                                saveFeeds(feeds);
+                            };
+                            xhr.send(JSON.stringify({ action: 'delete_all', feed_url: feedUrl }));
+                        } else {
+                            // Remove from this complication only
+                            var feeds = getFeeds();
+                            if (idx >= 0 && idx < feeds.length) {
+                                feeds.splice(idx, 1);
+                                saveFeeds(feeds);
+                            }
+                        }
                     });
                 });
             })(editBtns[i]);
         }
 
-        // Delete buttons
-        var delBtns = feedList.querySelectorAll('.prop-feed-delete');
-        for (var j = 0; j < delBtns.length; j++) {
-            (function (btn) {
-                btn.addEventListener('click', function () {
-                    var idx = parseInt(btn.getAttribute('data-feed-idx'), 10);
-                    var feeds = getFeeds();
-                    if (idx < 0 || idx >= feeds.length) return;
-                    feeds.splice(idx, 1);
-                    saveFeeds(feeds);
-                });
-            })(delBtns[j]);
-        }
+        // Shared feeds section — load watch feeds and render below local feeds
+        getWatchFeeds(function (watchFeeds) {
+            if (!watchFeeds) return;
+            var localFeeds = getFeeds();
+            var localUrls = {};
+            for (var li = 0; li < localFeeds.length; li++) {
+                localUrls[localFeeds[li].url] = true;
+            }
+
+            // Add usage badges to local feed items
+            var feedItems = feedList.querySelectorAll('.prop-feed-item');
+            for (var bi = 0; bi < feedItems.length; bi++) {
+                var idx = parseInt(feedItems[bi].getAttribute('data-feed-idx'), 10);
+                if (idx >= 0 && idx < localFeeds.length) {
+                    var url = localFeeds[idx].url;
+                    var entry = watchFeeds[url];
+                    if (entry && entry.count > 1) {
+                        var badge = document.createElement('span');
+                        badge.className = 'prop-feed-usage';
+                        badge.textContent = 'in ' + entry.count + ' complications';
+                        var nameEl = feedItems[bi].querySelector('.prop-feed-name');
+                        if (nameEl) nameEl.parentNode.insertBefore(badge, nameEl.nextSibling);
+                    }
+                }
+            }
+
+            // Collect shared feeds not in local list
+            var sharedFeeds = [];
+            var urls = Object.keys(watchFeeds);
+            for (var si = 0; si < urls.length; si++) {
+                if (!localUrls[urls[si]]) {
+                    sharedFeeds.push(watchFeeds[urls[si]]);
+                }
+            }
+            if (sharedFeeds.length === 0) return;
+
+            // Insert shared section before the Add button
+            var sharedDiv = document.createElement('div');
+            sharedDiv.className = 'prop-feed-shared-section';
+            sharedDiv.innerHTML = '<div class="prop-feed-shared-label">Other feeds on this watch</div>';
+            for (var sfi = 0; sfi < sharedFeeds.length; sfi++) {
+                (function (sf) {
+                    var item = document.createElement('div');
+                    item.className = 'prop-feed-item prop-feed-item-shared';
+                    item.innerHTML = '<label class="prop-feed-enable-label">' +
+                        '<input type="checkbox" class="prop-feed-enable-cb" />' +
+                        '<span class="prop-feed-name">' + escHtml(sf.name) + '</span></label>';
+                    item.querySelector('.prop-feed-enable-cb').addEventListener('change', function () {
+                        var feeds = getFeeds();
+                        feeds.push({ name: sf.name, url: sf.url, bold: false, refresh: 30 });
+                        saveFeeds(feeds);
+                    });
+                    sharedDiv.appendChild(item);
+                })(sharedFeeds[sfi]);
+            }
+            var addButton = feedList.querySelector('.prop-feed-add');
+            if (addButton) {
+                feedList.insertBefore(sharedDiv, addButton);
+            } else {
+                feedList.appendChild(sharedDiv);
+            }
+        });
     }
 
     function bindSteppers() {

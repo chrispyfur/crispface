@@ -1046,6 +1046,73 @@ body.simulating .canvas-container-wrapper {
     margin-top: 16px;
 }
 
+/* Shared feeds section */
+.prop-feed-shared-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #ccc;
+}
+
+.prop-feed-shared-label {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 4px;
+}
+
+.prop-feed-item-shared {
+    opacity: 0.5;
+}
+
+.prop-feed-item-shared:hover {
+    opacity: 0.8;
+}
+
+.prop-feed-enable-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    flex: 1;
+    margin: 0;
+}
+
+.prop-feed-enable-cb {
+    width: auto;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.prop-feed-usage {
+    font-size: 10px;
+    color: #999;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+
+/* Feed modal danger zone */
+.prop-feed-modal-danger {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #eee;
+    display: flex;
+    gap: 8px;
+}
+
+.prop-feed-modal-danger button {
+    font-size: 12px;
+    padding: 4px 10px;
+    color: #c00;
+    background: none;
+    border: 1px solid #c00;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.prop-feed-modal-danger button:hover {
+    background: #c00;
+    color: #fff;
+}
+
 /* Advanced toggle */
 .prop-advanced-toggle {
     font-size: 11px;
