@@ -86,8 +86,8 @@ public:
             if (cfFaceCount > 0) cfNeedsSync = false;
         }
 
-        // First boot: show boot screen before attempting sync
-        if (cfFirstBoot && cfFaceCount == 0) {
+        // First boot / reboot: show boot screen before first sync
+        if (cfFirstBoot) {
             renderBootScreen();
             syncFromServer();
             cfNeedsSync = false;
@@ -1376,7 +1376,7 @@ private:
         }
     }
 
-    // ---- Boot screen (first boot only, before first sync) ----
+    // ---- Boot screen (shown on every boot/reboot before first sync) ----
 
     void renderBootScreen() {
         display.setFullWindow();
@@ -1402,12 +1402,16 @@ private:
         display.setCursor((200 - (int)tw) / 2, 110);
         display.print(tbuf);
 
-        // Status
+        // Status lines (same layout as fallback)
         display.setFont(&FreeSans9pt7b);
         const char* l1 = "Syncing...";
+        const char* l2 = "Press top-left to sync";
         display.getTextBounds(l1, 0, 0, &tx, &ty, &tw, &th);
-        display.setCursor((200 - (int)tw) / 2, 170);
+        display.setCursor((200 - (int)tw) / 2, 155);
         display.print(l1);
+        display.getTextBounds(l2, 0, 0, &tx, &ty, &tw, &th);
+        display.setCursor((200 - (int)tw) / 2, 180);
+        display.print(l2);
 
         display.display(true); // partial refresh to show immediately
     }
