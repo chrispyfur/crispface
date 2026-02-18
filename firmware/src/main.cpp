@@ -1402,16 +1402,12 @@ private:
         display.setCursor((200 - (int)tw) / 2, 110);
         display.print(tbuf);
 
-        // Status lines (same layout as fallback)
+        // Status
         display.setFont(&FreeSans9pt7b);
         const char* l1 = "Syncing...";
-        const char* l2 = "Press top-left to sync";
         display.getTextBounds(l1, 0, 0, &tx, &ty, &tw, &th);
-        display.setCursor((200 - (int)tw) / 2, 155);
+        display.setCursor((200 - (int)tw) / 2, 170);
         display.print(l1);
-        display.getTextBounds(l2, 0, 0, &tx, &ty, &tw, &th);
-        display.setCursor((200 - (int)tw) / 2, 180);
-        display.print(l2);
 
         display.display(true); // partial refresh to show immediately
     }
