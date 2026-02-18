@@ -567,6 +567,91 @@ body.editor-page .main-content {
     letter-spacing: 0.5px;
 }
 
+/* Face card list in editor sidebar */
+.face-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.face-card-list .face-card {
+    padding: 0;
+    cursor: pointer;
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    transition: border-color 0.15s;
+    background: #fff;
+}
+
+.face-card-list .face-card:hover {
+    border-color: var(--blue);
+    box-shadow: none;
+}
+
+.face-card-list .face-card.face-card-active {
+    border-color: var(--orange);
+    border-width: 2px;
+}
+
+.face-card-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 5px 5px 0 0;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+.face-card-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gray-dark);
+    padding: 4px 8px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    border-top: 1px solid var(--gray-light);
+}
+
+/* Face settings accordion toggle */
+.face-settings-toggle {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin: 4px 0 0;
+    padding: 8px 0 4px;
+    border-top: 1px solid var(--gray-light);
+    cursor: pointer;
+    user-select: none;
+}
+
+.face-settings-toggle::before {
+    content: '\25B6';
+    display: inline-block;
+    font-size: 8px;
+    margin-right: 6px;
+    transition: transform 0.15s;
+}
+
+.face-settings-toggle.face-settings-open::before {
+    transform: rotate(90deg);
+}
+
+.face-settings-toggle:hover {
+    color: var(--gray-dark);
+}
+
+.face-settings-body {
+    padding-top: 8px;
+}
+
 .no-selection {
     font-size: 13px;
     color: var(--gray-medium);

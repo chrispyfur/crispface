@@ -69,6 +69,7 @@
     var DISPLAY_SIZE_MAP = { 8: 17, 12: 17, 16: 23, 24: 34, 48: 44, 60: 67, 72: 89 };
 
     var ALIGNS = ['left', 'center', 'right'];
+    var drawWeatherIconPreview; // assigned in initCanvas, used by renderFacePreview
 
     // Map editor font families to @font-face web fonts (same TTFs as GFX firmware)
     var CANVAS_FONT = {
@@ -109,6 +110,200 @@
         if (content.bold === undefined) content.bold = false;
         if (content.italic === undefined) content.italic = false;
         return content;
+    }
+
+    // Render a face preview onto a plain 2D canvas context from raw face JSON
+    function renderFacePreview(ctx, faceData) {
+        var bg = faceData.background === 'white' ? '#ffffff' : '#000000';
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, 200, 200);
+
+        var complications = faceData.complications || [];
+        for (var ci = 0; ci < complications.length; ci++) {
+            var c = complications[ci];
+            if (c.type !== 'text') continue;
+
+            // Clone content and migrate old format
+            var content = {};
+            var src = c.content || {};
+            for (var k in src) content[k] = src[k];
+            content = migrateContent(content);
+
+            var col = (content.color === 'white') ? '#ffffff' : '#000000';
+            var bw = c.border_width || 0;
+            var inset = bw > 0 ? bw + (c.border_padding || 0) : 0;
+            var padLeft = c.padding_left || 0;
+            var padTop = c.padding_top || 0;
+
+            var ix = (c.x || 0) + inset + padLeft;
+            var iy = (c.y || 0) + inset + padTop;
+            var iw = Math.max((c.w || 80) - inset * 2 - padLeft, 1);
+            var ih = Math.max((c.h || 40) - inset * 2 - padTop, 1);
+
+            // Draw border
+            if (bw > 0) {
+                var br = c.border_radius || 0;
+                var bx = c.x || 0;
+                var by = c.y || 0;
+                var bww = c.w || 80;
+                var bh = c.h || 40;
+                ctx.save();
+                ctx.strokeStyle = col;
+                ctx.lineWidth = bw;
+                if (br > 0) {
+                    var r = Math.min(br, bww / 2, bh / 2);
+                    ctx.beginPath();
+                    ctx.moveTo(bx + r, by);
+                    ctx.lineTo(bx + bww - r, by);
+                    ctx.arcTo(bx + bww, by, bx + bww, by + r, r);
+                    ctx.lineTo(bx + bww, by + bh - r);
+                    ctx.arcTo(bx + bww, by + bh, bx + bww - r, by + bh, r);
+                    ctx.lineTo(bx + r, by + bh);
+                    ctx.arcTo(bx, by + bh, bx, by + bh - r, r);
+                    ctx.lineTo(bx, by + r);
+                    ctx.arcTo(bx, by, bx + r, by, r);
+                    ctx.closePath();
+                    ctx.stroke();
+                } else {
+                    ctx.strokeRect(bx + bw / 2, by + bw / 2, bww - bw, bh - bw);
+                }
+                ctx.restore();
+            }
+
+            var cType = c.complication_type || c.complication_id || '';
+
+            // Battery icon
+            if (cType === 'battery' && (c.params || {}).display !== 'percentage' && (c.params || {}).display !== 'voltage') {
+                ctx.save();
+                ctx.fillStyle = bg;
+                ctx.fillRect(ix, iy, iw, ih);
+                var nubW = 2, gap = 1;
+                var bodyW = iw - nubW - gap;
+                if (bodyW < 6) bodyW = 6;
+                ctx.strokeStyle = col;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(ix + 0.5, iy + 0.5, bodyW - 1, ih - 1);
+                var nubH = Math.floor(ih * 2 / 5);
+                if (nubH < 2) nubH = 2;
+                var nubY = iy + Math.floor((ih - nubH) / 2);
+                ctx.fillStyle = col;
+                ctx.fillRect(ix + bodyW + gap, nubY, nubW, nubH);
+                var bPad = 2;
+                var maxFillW = bodyW - bPad * 2;
+                var fillW = Math.floor(maxFillW * 0.65);
+                if (fillW > 0) ctx.fillRect(ix + bPad, iy + bPad, fillW, ih - bPad * 2);
+                ctx.restore();
+                continue;
+            }
+
+            // Weather icon
+            if (String(content.value || '').indexOf('icon:') === 0) {
+                var iconParts = String(content.value).substring(5).split(':');
+                var weatherCode = parseInt(iconParts[0], 10) || 0;
+                var iconSize = iconParts.length > 1 ? parseInt(iconParts[1], 10) : 0;
+                ctx.save();
+                ctx.fillStyle = bg;
+                ctx.fillRect(ix, iy, iw, ih);
+                if (drawWeatherIconPreview) {
+                    if (iconSize > 0 && iconSize < iw && iconSize < ih) {
+                        var ox = ix + Math.round((iw - iconSize) / 2);
+                        var oy = iy + Math.round((ih - iconSize) / 2);
+                        drawWeatherIconPreview(ctx, weatherCode, ox, oy, iconSize, iconSize, col);
+                    } else {
+                        drawWeatherIconPreview(ctx, weatherCode, ix, iy, iw, ih, col);
+                    }
+                }
+                ctx.restore();
+                continue;
+            }
+
+            // Text rendering
+            var gfx = getGfxMetrics(content.family, content.size, content.bold);
+            var weight = content.bold ? 'bold ' : '';
+            var cfFont = CANVAS_FONT[content.family] || 'CrispSans';
+
+            ctx.fillStyle = bg;
+            ctx.fillRect(ix, iy, iw, ih);
+
+            ctx.font = weight + gfx.th + 'px ' + cfFont;
+            ctx.fillStyle = col;
+            ctx.textBaseline = 'alphabetic';
+
+            var metrics = ctx.measureText('Ay');
+            var ascent = Math.round(metrics.actualBoundingBoxAscent);
+            var lineH = gfx.th + 2;
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(ix, iy, iw, ih);
+            ctx.clip();
+
+            var text = String(content.value || '');
+            var lines = text.split('\n');
+            var curY = iy + ascent;
+            var align = content.align || 'left';
+
+            for (var li = 0; li < lines.length; li++) {
+                if (curY - ascent >= iy + ih) break;
+                var lineText = lines[li];
+
+                // Day divider
+                if (lineText.charCodeAt(0) === 4 && lineText.length <= 1) {
+                    var divW = Math.min(iw, 120);
+                    var dlx = ix + Math.round((iw - divW) / 2);
+                    var dly = curY - ascent + 1;
+                    var dcx = dlx + Math.round(divW / 2);
+                    var dcy = dly + 1;
+                    ctx.fillRect(dcx, dly, 1, 1);
+                    ctx.fillRect(dcx - 1, dcy, 3, 1);
+                    ctx.fillRect(dcx, dly + 2, 1, 1);
+                    if (dcx - 4 >= dlx) ctx.fillRect(dlx, dcy, dcx - 4 - dlx + 1, 1);
+                    if (dcx + 4 <= dlx + divW - 1) ctx.fillRect(dcx + 4, dcy, dlx + divW - 1 - (dcx + 4) + 1, 1);
+                    curY += 7;
+                    continue;
+                }
+
+                var lineBold = false;
+                if (lineText.charCodeAt(0) === 3) { lineBold = true; lineText = lineText.substring(1); }
+
+                var circleType = 0;
+                if (lineText.charCodeAt(0) === 1) { circleType = 1; lineText = lineText.substring(1).trimStart(); }
+                else if (lineText.charCodeAt(0) === 2) { circleType = 2; lineText = lineText.substring(1).trimStart(); }
+
+                var lineWeight = (content.bold || lineBold) ? 'bold ' : weight;
+                ctx.font = lineWeight + gfx.th + 'px ' + cfFont;
+
+                var circleW = 0;
+                if (circleType) {
+                    var cr = Math.round(ascent / 4);
+                    circleW = cr * 2 + 3;
+                }
+
+                var lineW = ctx.measureText(lineText).width;
+                var curX;
+                if (align === 'center') {
+                    curX = ix + Math.round((iw - lineW - circleW) / 2);
+                } else if (align === 'right') {
+                    curX = ix + iw - Math.ceil(lineW) - circleW;
+                } else {
+                    curX = ix;
+                }
+
+                if (circleType) {
+                    var cr2 = Math.round(ascent / 4);
+                    var circY = curY - Math.round(ascent / 2);
+                    var circX = curX + cr2;
+                    ctx.beginPath();
+                    ctx.arc(circX, circY, cr2, 0, Math.PI * 2);
+                    if (circleType === 1) ctx.fill(); else ctx.stroke();
+                    curX += circleW;
+                }
+                ctx.fillText(lineText, curX, curY);
+                curY += lineH;
+            }
+            ctx.font = weight + gfx.th + 'px ' + cfFont;
+            ctx.restore();
+        }
     }
 
     // Initialize canvas (called after face data is loaded)
@@ -191,7 +386,7 @@
         });
 
         // Weather icon drawing for editor preview (mirrors firmware drawWeatherIcon)
-        function drawWeatherIconPreview(ctx, code, x, y, w, h, col) {
+        drawWeatherIconPreview = function(ctx, code, x, y, w, h, col) {
             var cx = x + w / 2, cy = y + h / 2;
             var s = Math.min(w, h);
 
@@ -312,7 +507,7 @@
             } else {
                 cloudShape(cx, cy - s / 8, s);
             }
-        }
+        };
 
         // Draw complication borders and battery icon after canvas render
         canvas.on('after:render', function () {
@@ -709,41 +904,137 @@
         listEl.innerHTML = html;
     }
 
-    // Load face list and populate the face navigation dropdown
-    function loadFaceDropdown(currentId) {
-        var select = document.getElementById('face-select');
-        if (!select) return;
+    // Load face list as thumbnail cards in the sidebar
+    function loadFaceCards(currentId) {
+        var listEl = document.getElementById('face-card-list');
+        if (!listEl) return;
 
-        // Preserve watch param when navigating between faces
         var urlParams = new URLSearchParams(window.location.search);
         var watchParam = urlParams.get('watch') || '';
 
-        CF.api('GET', '/api/faces.py').then(function (resp) {
-            if (!resp.success || !resp.faces) {
-                select.innerHTML = '<option>' + (CF.faceData.name || 'Current') + '</option>';
+        var facesPromise;
+        if (watchParam) {
+            // Fetch watch face_ids and all faces, then filter/order
+            facesPromise = Promise.all([
+                CF.api('GET', '/api/watch.py?id=' + watchParam),
+                CF.api('GET', '/api/faces.py')
+            ]).then(function (results) {
+                var watchResp = results[0];
+                var facesResp = results[1];
+                var allFaces = facesResp.success ? facesResp.faces : [];
+                if (!watchResp.success || !watchResp.watch || !watchResp.watch.face_ids) {
+                    return allFaces;
+                }
+                var ids = watchResp.watch.face_ids;
+                var faceMap = {};
+                for (var i = 0; i < allFaces.length; i++) {
+                    faceMap[allFaces[i].id] = allFaces[i];
+                }
+                var ordered = [];
+                for (var j = 0; j < ids.length; j++) {
+                    if (faceMap[ids[j]]) ordered.push(faceMap[ids[j]]);
+                }
+                return ordered.length > 0 ? ordered : allFaces;
+            });
+        } else {
+            facesPromise = CF.api('GET', '/api/faces.py').then(function (resp) {
+                return resp.success ? resp.faces : [];
+            });
+        }
+
+        facesPromise.then(function (faces) {
+            listEl.innerHTML = '';
+            if (faces.length === 0) {
+                listEl.innerHTML = '<div class="no-selection">No faces</div>';
                 return;
             }
-            select.innerHTML = '';
-            var faces = resp.faces;
-            for (var i = 0; i < faces.length; i++) {
-                var opt = document.createElement('option');
-                opt.value = faces[i].id;
-                opt.textContent = faces[i].name || faces[i].id;
-                if (faces[i].id === currentId) opt.selected = true;
-                select.appendChild(opt);
-            }
-        }).catch(function () {
-            select.innerHTML = '<option>' + (CF.faceData.name || 'Current') + '</option>';
-        });
 
-        select.addEventListener('change', function () {
-            var newId = select.value;
-            if (newId && newId !== CF.faceId) {
-                var url = CF.baseUrl + '/editor.html?id=' + newId;
-                if (watchParam) url += '&watch=' + watchParam;
-                window.location.href = url;
+            for (var i = 0; i < faces.length; i++) {
+                var face = faces[i];
+                var card = document.createElement('div');
+                card.className = 'face-card' + (face.id === currentId ? ' face-card-active' : '');
+                card.setAttribute('data-face-id', face.id);
+
+                var cvs = document.createElement('canvas');
+                cvs.className = 'face-card-canvas';
+                cvs.width = 200;
+                cvs.height = 200;
+                card.appendChild(cvs);
+
+                var nameDiv = document.createElement('div');
+                nameDiv.className = 'face-card-name';
+                nameDiv.textContent = face.name || face.id;
+                card.appendChild(nameDiv);
+
+                listEl.appendChild(card);
+
+                // Click handler for switching
+                (function (faceId) {
+                    card.addEventListener('click', function () {
+                        if (faceId === CF.faceId) return;
+                        switchToFace(faceId);
+                    });
+                })(face.id);
             }
+
+            // Render previews after fonts are ready
+            document.fonts.ready.then(function () {
+                var cards = listEl.querySelectorAll('.face-card');
+                for (var i = 0; i < cards.length; i++) {
+                    var faceId = cards[i].getAttribute('data-face-id');
+                    var faceData = null;
+                    for (var j = 0; j < faces.length; j++) {
+                        if (faces[j].id === faceId) { faceData = faces[j]; break; }
+                    }
+                    if (faceData) {
+                        var cvs = cards[i].querySelector('.face-card-canvas');
+                        renderFacePreview(cvs.getContext('2d'), faceData);
+                    }
+                }
+            });
+        }).catch(function () {
+            listEl.innerHTML = '<div class="no-selection">Failed to load faces</div>';
         });
+    }
+
+    // Switch to a different face without page reload
+    function switchToFace(faceId) {
+        CF.api('GET', '/api/face.py?id=' + faceId).then(function (resp) {
+            if (!resp.success || !resp.face) return;
+
+            stopAllPolling();
+            CF.faceId = resp.face.id;
+            CF.faceData = resp.face;
+            loadFace(resp.face);
+            populateSidebar(resp.face);
+            startLivePolling();
+
+            // Update active card highlight
+            var cards = document.querySelectorAll('#face-card-list .face-card');
+            for (var i = 0; i < cards.length; i++) {
+                cards[i].classList.toggle('face-card-active', cards[i].getAttribute('data-face-id') === faceId);
+            }
+
+            // Update URL without reload
+            var params = new URLSearchParams(window.location.search);
+            params.set('id', faceId);
+            history.replaceState(null, '', '?' + params.toString());
+
+            // Update title
+            document.title = 'Edit: ' + (resp.face.name || faceId) + ' - CrispFace';
+        });
+    }
+
+    // Update the current face's thumbnail card after save
+    function refreshCurrentCardPreview() {
+        var card = document.querySelector('#face-card-list .face-card[data-face-id="' + CF.faceId + '"]');
+        if (!card) return;
+        var cvs = card.querySelector('.face-card-canvas');
+        if (!cvs) return;
+        var data = serializeFace();
+        renderFacePreview(cvs.getContext('2d'), data);
+        var nameEl = card.querySelector('.face-card-name');
+        if (nameEl) nameEl.textContent = data.name || CF.faceId;
     }
 
     // Serialize canvas to spec-format JSON
@@ -814,6 +1105,7 @@
                     statusEl.textContent = 'Saved';
                     statusEl.style.color = '#43A047';
                     setTimeout(function () { statusEl.textContent = ''; }, 2000);
+                    refreshCurrentCardPreview();
                 } else {
                     statusEl.textContent = 'Error: ' + (resp.error || 'Unknown');
                     statusEl.style.color = '#E53935';
@@ -1316,7 +1608,18 @@
                 initCanvas();
                 bindToolbar();
                 loadComplicationTypes();
-                loadFaceDropdown(faceId);
+                loadFaceCards(faceId);
+
+                // Face settings accordion toggle
+                var fsToggle = document.getElementById('face-settings-toggle');
+                var fsBody = document.getElementById('face-settings-body');
+                if (fsToggle && fsBody) {
+                    fsToggle.addEventListener('click', function () {
+                        var open = fsBody.style.display !== 'none';
+                        fsBody.style.display = open ? 'none' : '';
+                        fsToggle.classList.toggle('face-settings-open', !open);
+                    });
+                }
 
                 // Expose for properties.js and debugging
                 window.CRISPFACE.canvas = canvas;
