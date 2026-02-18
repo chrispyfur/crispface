@@ -159,7 +159,15 @@ def format_events(events, detail, max_chars):
       full     - prefix + title + @ location + description
     """
     lines = []
+    prev_date = None
     for ev in events:
+        # Day divider: insert \x04 marker between timed events on different days
+        ev_date = ev['dtstart'].date() if not ev.get('all_day') else None
+        if ev_date and prev_date and ev_date != prev_date:
+            lines.append('\x04')
+        if ev_date:
+            prev_date = ev_date
+
         subject = ev.get('summary', 'No title')
         lineBold = bool(ev.get('_bold'))
 
@@ -340,6 +348,7 @@ if any_alerts:
         alerts.append({
             'sec': seconds_from_now,
             'text': alert_text[:59],
+            'time': dt.strftime('%H:%M'),
             'ins': bool(ev.get('_insistent')),
             'uid': uid,
         })

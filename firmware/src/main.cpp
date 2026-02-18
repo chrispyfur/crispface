@@ -23,8 +23,9 @@ struct CfAlert {
     int     eventTime;   // absolute RTC timestamp when this alert fires
     uint8_t buzzCount;   // 0 = insistent (buzz loop until dismissed), N = vibMotor N pulses
     bool    fired;
-    bool    preAlert;    // true = "In 5 min" warning, false = "Now" at event time
+    bool    preAlert;    // true = pre-alert warning, false = at event time
     char    text[60];
+    char    time[6];     // "HH:MM" for notification header
 };
 RTC_DATA_ATTR CfAlert cfAlerts[20];       // doubled from 10 (two per event)
 RTC_DATA_ATTR int     cfAlertCount     = 0;
@@ -32,6 +33,7 @@ RTC_DATA_ATTR bool    cfNotifActive    = false;
 RTC_DATA_ATTR bool    cfNotifInsistent = false;
 RTC_DATA_ATTR bool    cfNotifPreAlert  = false;
 RTC_DATA_ATTR char    cfNotifText[60]  = "";
+RTC_DATA_ATTR char    cfNotifTime[6]   = "";
 
 class CrispFace : public Watchy {
 public:
@@ -117,12 +119,17 @@ public:
                 int diff = cfAlerts[i].eventTime - now;
                 if (diff >= 0 && diff <= 60) {
                     cfAlerts[i].fired = true;
+                    // Both gentle and insistent show notification screen
+                    cfNotifActive = true;
+                    cfNotifPreAlert = cfAlerts[i].preAlert;
+                    strncpy(cfNotifText, cfAlerts[i].text, 59);
+                    cfNotifText[59] = '\0';
+                    strncpy(cfNotifTime, cfAlerts[i].time, 5);
+                    cfNotifTime[5] = '\0';
+
                     if (cfAlerts[i].buzzCount == 0) {
-                        // Insistent: buzz first (privacy), reveal text on button press
-                        cfNotifActive = true;
-                        cfNotifPreAlert = cfAlerts[i].preAlert;
-                        strncpy(cfNotifText, cfAlerts[i].text, 59);
-                        cfNotifText[59] = '\0';
+                        // Insistent: continuous pulsing buzz until button press
+                        cfNotifInsistent = true;
                         insistentBuzzLoop();
                         // Wait for button release to prevent immediate re-wake
                         while (digitalRead(UP_BTN_PIN) == LOW ||
@@ -132,12 +139,14 @@ public:
                             delay(50);
                         }
                         delay(100); // debounce
-                        renderNotification();
-                        return;
                     } else {
-                        // Regular: buzz N times (1 for pre-alert, 3 for event)
-                        vibMotor(75, cfAlerts[i].buzzCount * 2);
+                        // Gentle: triple buzz, 3s pause, triple buzz
+                        vibMotor(75, 6);
+                        delay(3000);
+                        vibMotor(75, 6);
                     }
+                    renderNotification();
+                    return;
                 }
             }
         }
@@ -171,6 +180,7 @@ public:
             cfNotifInsistent = false;
             cfNotifPreAlert = false;
             cfNotifText[0] = '\0';
+            cfNotifTime[0] = '\0';
             cfDismissing = true; // skip sync/alerts in the redraw
             RTC.read(currentTime);
             showWatchFace(true);
@@ -238,7 +248,15 @@ private:
 
         // Context-aware header centered near top
         display.setFont(&FreeSans9pt7b);
-        const char* header = cfNotifPreAlert ? "In 5 min" : "Now";
+        char headerBuf[24];
+        if (cfNotifPreAlert) {
+            strcpy(headerBuf, "In about 5 minutes");
+        } else if (cfNotifTime[0]) {
+            snprintf(headerBuf, sizeof(headerBuf), "At %s", cfNotifTime);
+        } else {
+            strcpy(headerBuf, "Now");
+        }
+        const char* header = headerBuf;
         display.getTextBounds(header, 0, 0, &tx, &ty, &tw, &th);
         display.setCursor((200 - (int)tw) / 2, 40);
         display.print(header);
@@ -646,6 +664,7 @@ private:
                         int evTime = syncTime + secFromNow;
                         bool ins = alert["ins"] | false;
                         const char* txt = alert["text"] | "Event";
+                        const char* evTimeStr = alert["time"] | "";
 
                         // 1. Pre-alert (5 min before event)
                         if (cfAlertCount < 20) {
@@ -655,6 +674,8 @@ private:
                             cfAlerts[cfAlertCount].preAlert = true;
                             strncpy(cfAlerts[cfAlertCount].text, txt, 59);
                             cfAlerts[cfAlertCount].text[59] = '\0';
+                            strncpy(cfAlerts[cfAlertCount].time, evTimeStr, 5);
+                            cfAlerts[cfAlertCount].time[5] = '\0';
                             cfAlertCount++;
                         }
 
@@ -666,6 +687,8 @@ private:
                             cfAlerts[cfAlertCount].preAlert = false;
                             strncpy(cfAlerts[cfAlertCount].text, txt, 59);
                             cfAlerts[cfAlertCount].text[59] = '\0';
+                            strncpy(cfAlerts[cfAlertCount].time, evTimeStr, 5);
+                            cfAlerts[cfAlertCount].time[5] = '\0';
                             cfAlertCount++;
                         }
 
@@ -1091,9 +1114,23 @@ private:
                                    : str.substring(idx, nl);
             idx = (nl < 0) ? str.length() + 1 : nl + 1;
 
+            const char* linePtr = line.c_str();
+
+            // Day divider: \x04 byte renders as centered horizontal line
+            if ((uint8_t)linePtr[0] == 0x04 && strlen(linePtr) <= 1) {
+                int lineW = bw < 120 ? bw : 120;
+                int lx = bx + (bw - lineW) / 2;
+                int ly = curY - ascent + 1;
+                if (ly >= by && ly < by + bh) {
+                    display.drawLine(lx, ly, lx + lineW - 1, ly, color);
+                }
+                curY += 3;  // 1px pad + 1px line + 1px pad
+                firstLine = false;
+                continue;
+            }
+
             // Check for bold marker byte (\x03 = render this line in bold)
             bool useBold = false;
-            const char* linePtr = line.c_str();
             if ((uint8_t)linePtr[0] == 0x03) { useBold = true; linePtr++; }
 
             // Check for circle marker bytes (all-day event indicators)
@@ -1199,10 +1236,24 @@ private:
                                    : str.substring(idx, nl);
             idx = (nl < 0) ? str.length() + 1 : nl + 1;
 
+            const char* linePtr = line.c_str();
+
+            // Day divider: \x04 byte renders as centered horizontal line
+            if ((uint8_t)linePtr[0] == 0x04 && strlen(linePtr) <= 1) {
+                int lineW = bw < 120 ? bw : 120;
+                int lx = bx + (bw - lineW) / 2;
+                int ly = curY - ascent + 1;
+                if (ly >= by && ly < by + bh) {
+                    display.drawLine(lx, ly, lx + lineW - 1, ly, color);
+                }
+                curY += 3;  // 1px pad + 1px line + 1px pad
+                firstLine = false;
+                continue;
+            }
+
             // Check for circle marker bytes (all-day event indicators)
             bool drawFilledCircle = false;
             bool drawOpenCircle = false;
-            const char* linePtr = line.c_str();
             if ((uint8_t)linePtr[0] == 0x01) { drawFilledCircle = true; linePtr++; }
             else if ((uint8_t)linePtr[0] == 0x02) { drawOpenCircle = true; linePtr++; }
             if ((drawFilledCircle || drawOpenCircle) && linePtr[0] == ' ') linePtr++;
