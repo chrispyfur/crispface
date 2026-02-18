@@ -452,6 +452,26 @@
                         if (curY - ascent >= iy + ih) break;
                         var lineText = lines[li];
 
+                        // Day divider: \x04 renders as ornamental ———◆——— line
+                        if (lineText.charCodeAt(0) === 4 && lineText.length <= 1) {
+                            var divW = Math.min(iw, 120);
+                            var dlx = ix + Math.round((iw - divW) / 2);
+                            var dly = curY - ascent + 1;
+                            var dcx = dlx + Math.round(divW / 2);
+                            var dcy = dly + 1;
+                            // Diamond
+                            ctx.fillRect(dcx, dly, 1, 1);
+                            ctx.fillRect(dcx - 1, dcy, 3, 1);
+                            ctx.fillRect(dcx, dly + 2, 1, 1);
+                            // Lines either side
+                            if (dcx - 4 >= dlx)
+                                ctx.fillRect(dlx, dcy, dcx - 4 - dlx + 1, 1);
+                            if (dcx + 4 <= dlx + divW - 1)
+                                ctx.fillRect(dcx + 4, dcy, dlx + divW - 1 - (dcx + 4) + 1, 1);
+                            curY += 5;
+                            continue;
+                        }
+
                         // Bold marker: \x03 prefix means render this line in bold
                         var lineBold = false;
                         if (lineText.charCodeAt(0) === 3) { lineBold = true; lineText = lineText.substring(1); }
