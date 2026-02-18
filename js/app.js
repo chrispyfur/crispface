@@ -79,7 +79,11 @@
             }
             select.addEventListener('change', function () {
                 localStorage.setItem('crispface_current_watch', this.value);
-                window.location.reload();
+                if (document.body.getAttribute('data-page') === 'editor') {
+                    window.location.href = BASE_URL + '/editor.html?watch=' + this.value;
+                } else {
+                    window.location.reload();
+                }
             });
             nameEl.parentNode.replaceChild(select, nameEl);
         }
@@ -151,7 +155,7 @@
         // If already logged in, redirect
         api('GET', '/api/session.py').then(function (data) {
             if (data.authenticated) {
-                window.location.href = BASE_URL + '/faces.html';
+                window.location.href = BASE_URL + '/editor.html';
             }
         }).catch(function () {});
 
@@ -165,7 +169,7 @@
             api('POST', '/api/login.py', { username: username, password: password })
                 .then(function (data) {
                     if (data.success) {
-                        window.location.href = BASE_URL + '/faces.html';
+                        window.location.href = BASE_URL + '/editor.html';
                     } else {
                         errorEl.textContent = data.error || 'Login failed';
                         errorEl.style.display = 'block';

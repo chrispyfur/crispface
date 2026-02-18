@@ -1695,69 +1695,160 @@
         });
     }
 
+    // Boot the editor once a face is loaded
+    function bootEditor(faceData, faceId) {
+        CF.faceId = faceId;
+        CF.faceData = faceData;
+        document.title = 'Edit: ' + faceData.name + ' - CrispFace';
+
+        populateSidebar(faceData);
+        initCanvas();
+        bindToolbar();
+        loadComplicationTypes();
+        loadFaceCards(faceId);
+
+        // Face settings cog toggle
+        var fsToggle = document.getElementById('face-settings-toggle');
+        var fsBody = document.getElementById('face-settings-body');
+        if (fsToggle && fsBody) {
+            fsToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var open = fsBody.style.display !== 'none';
+                fsBody.style.display = open ? 'none' : '';
+                fsToggle.classList.toggle('face-settings-open', !open);
+            });
+            document.addEventListener('click', function (e) {
+                if (fsBody.style.display !== 'none' && !fsBody.contains(e.target) && e.target !== fsToggle) {
+                    fsBody.style.display = 'none';
+                    fsToggle.classList.remove('face-settings-open');
+                }
+            });
+        }
+
+        // Expose for properties.js and debugging
+        window.CRISPFACE.canvas = canvas;
+        window.CRISPFACE.createTextComplication = createTextComplication;
+        window.CRISPFACE.serializeFace = serializeFace;
+        window.CRISPFACE.syncBackground = syncBackground;
+        window.CRISPFACE.findType = findType;
+        window.CRISPFACE.repollSource = repollSource;
+        window.CRISPFACE.refreshSidebarIntervals = refreshSidebarIntervals;
+    }
+
+    // Add a new face below the currently selected face
+    function addNewFace() {
+        var watchId = new URLSearchParams(window.location.search).get('watch') || CF.currentWatchId || '';
+        CF.api('POST', '/api/faces.py', { name: 'Untitled Face' }).then(function (data) {
+            if (!data.success || !data.face) return;
+            var newFaceId = data.face.id;
+
+            if (!watchId) {
+                // No watch context — just open the new face
+                switchToFace(newFaceId);
+                loadFaceCards(newFaceId);
+                return;
+            }
+
+            // Insert into watch face_ids after the current face
+            CF.api('GET', '/api/watch.py?id=' + watchId).then(function (wr) {
+                if (!wr.success || !wr.watch) return;
+                var ids = wr.watch.face_ids || [];
+                var currentIdx = ids.indexOf(CF.faceId);
+                if (currentIdx >= 0) {
+                    ids.splice(currentIdx + 1, 0, newFaceId);
+                } else {
+                    ids.push(newFaceId);
+                }
+                CF.api('POST', '/api/watch.py?id=' + watchId, { face_ids: ids }).then(function () {
+                    switchToFace(newFaceId);
+                    loadFaceCards(newFaceId);
+                });
+            });
+        });
+    }
+
+    // Resolve the first face for a watch, then boot the editor
+    function resolveFirstFace(watchId) {
+        CF.api('GET', '/api/watch.py?id=' + watchId).then(function (wr) {
+            if (!wr.success || !wr.watch) return;
+            var ids = wr.watch.face_ids || [];
+            if (ids.length === 0) {
+                // Watch has no faces — create one
+                CF.api('POST', '/api/faces.py', { name: 'Untitled Face' }).then(function (fr) {
+                    if (!fr.success || !fr.face) return;
+                    var fid = fr.face.id;
+                    CF.api('POST', '/api/watch.py?id=' + watchId, { face_ids: [fid] }).then(function () {
+                        var params = new URLSearchParams(window.location.search);
+                        params.set('id', fid);
+                        params.set('watch', watchId);
+                        history.replaceState(null, '', '?' + params.toString());
+                        bootEditor(fr.face, fid);
+                    });
+                });
+                return;
+            }
+            // Load the first face
+            var firstId = ids[0];
+            CF.api('GET', '/api/face.py?id=' + firstId).then(function (resp) {
+                if (!resp.success || !resp.face) return;
+                var params = new URLSearchParams(window.location.search);
+                params.set('id', firstId);
+                params.set('watch', watchId);
+                history.replaceState(null, '', '?' + params.toString());
+                bootEditor(resp.face, firstId);
+            });
+        });
+    }
+
     // Init: fetch face from API, then set up canvas
     document.addEventListener('DOMContentLoaded', function () {
         // Check auth first
         CF.requireAuth(function () {
-            // Get face ID from URL
             var params = new URLSearchParams(window.location.search);
             var faceId = params.get('id');
+            var watchParam = params.get('watch') || '';
 
-            if (!faceId) {
-                window.location.href = CF.baseUrl + '/faces.html';
+            // Bind add-face button
+            var addBtn = document.getElementById('btn-add-face');
+            if (addBtn) {
+                addBtn.addEventListener('click', function () {
+                    addNewFace();
+                });
+            }
+
+            if (faceId) {
+                // Direct face load (existing behavior)
+                CF.api('GET', '/api/face.py?id=' + faceId).then(function (resp) {
+                    if (!resp.success || !resp.face) {
+                        alert('Face not found');
+                        return;
+                    }
+                    bootEditor(resp.face, faceId);
+                }).catch(function () {
+                    alert('Failed to load face');
+                });
                 return;
             }
 
-            CF.faceId = faceId;
+            // No face ID — resolve from watch
+            var watches = CF.watches || [];
+            var watchId = watchParam || CF.currentWatchId;
 
-            // Fetch face data from API
-            CF.api('GET', '/api/face.py?id=' + faceId).then(function (resp) {
-                if (!resp.success || !resp.face) {
-                    alert('Face not found');
-                    window.location.href = CF.baseUrl + '/faces.html';
-                    return;
+            if (watches.length > 1 && !watchParam) {
+                // Multiple watches, no explicit watch — show prompt
+                var canvasArea = document.querySelector('.editor-canvas-area');
+                if (canvasArea) {
+                    canvasArea.innerHTML =
+                        '<div class="editor-select-watch">' +
+                        '<p>Select a watch from the top left</p>' +
+                        '</div>';
                 }
+                return;
+            }
 
-                CF.faceData = resp.face;
-                document.title = 'Edit: ' + resp.face.name + ' - CrispFace';
-
-                populateSidebar(resp.face);
-                initCanvas();
-                bindToolbar();
-                loadComplicationTypes();
-                loadFaceCards(faceId);
-
-                // Face settings cog toggle
-                var fsToggle = document.getElementById('face-settings-toggle');
-                var fsBody = document.getElementById('face-settings-body');
-                if (fsToggle && fsBody) {
-                    fsToggle.addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        var open = fsBody.style.display !== 'none';
-                        fsBody.style.display = open ? 'none' : '';
-                        fsToggle.classList.toggle('face-settings-open', !open);
-                    });
-                    // Close panel when clicking outside
-                    document.addEventListener('click', function (e) {
-                        if (fsBody.style.display !== 'none' && !fsBody.contains(e.target) && e.target !== fsToggle) {
-                            fsBody.style.display = 'none';
-                            fsToggle.classList.remove('face-settings-open');
-                        }
-                    });
-                }
-
-                // Expose for properties.js and debugging
-                window.CRISPFACE.canvas = canvas;
-                window.CRISPFACE.createTextComplication = createTextComplication;
-                window.CRISPFACE.serializeFace = serializeFace;
-                window.CRISPFACE.syncBackground = syncBackground;
-                window.CRISPFACE.findType = findType;
-                window.CRISPFACE.repollSource = repollSource;
-                window.CRISPFACE.refreshSidebarIntervals = refreshSidebarIntervals;
-            }).catch(function () {
-                alert('Failed to load face');
-                window.location.href = CF.baseUrl + '/faces.html';
-            });
+            if (watchId) {
+                resolveFirstFace(watchId);
+            }
         });
     });
 })();

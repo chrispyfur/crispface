@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Editor - CrispFace</title>
-    <link rel="stylesheet" href="/crispface/css/styles.css?v=9" />
+    <link rel="stylesheet" href="/crispface/css/styles.css?v=10" />
 </head>
 <body class="editor-page" data-page="editor">
 <div class="layout">
@@ -17,7 +17,6 @@
             </div>
         </div>
         <ul class="sidebar-nav">
-            <li><a href="/crispface/faces.html">Faces</a></li>
             <li><a href="/crispface/complications.html">Complications</a></li>
             <li><a href="/crispface/flash.html">Flash</a></li>
             <li class="admin-only" style="display:none;"><a href="/crispface/users.html">Users</a></li>
@@ -32,7 +31,7 @@
         <div class="editor-layout">
             <!-- Left panel: face cards + settings -->
             <div class="editor-sidebar-left">
-                <h3>Faces</h3>
+                <h3>Faces <button type="button" class="btn-add-face" id="btn-add-face" title="Add new face">+</button></h3>
                 <div class="face-card-list" id="face-card-list">
                     <div class="no-selection">Loading...</div>
                 </div>
@@ -85,9 +84,9 @@
     </main>
 </div>
 
-<script src="/crispface/js/app.js?v=3"></script>
+<script src="/crispface/js/app.js?v=4"></script>
 <script src="/crispface/js/fabric.min.js"></script>
-<script src="/crispface/js/editor.js?v=25"></script>
+<script src="/crispface/js/editor.js?v=26"></script>
 <script src="/crispface/js/properties.js?v=17"></script>
 </body>
 </html>

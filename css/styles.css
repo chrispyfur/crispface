@@ -567,6 +567,44 @@ body.editor-page .main-content {
     color: var(--gray-dark);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-add-face {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: var(--orange);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 26px;
+    text-align: center;
+    padding: 0;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+
+.btn-add-face:hover {
+    background: var(--orange-dark);
+}
+
+.editor-select-watch {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+}
+
+.editor-select-watch p {
+    font-size: 16px;
+    color: var(--gray-medium);
+    text-align: center;
 }
 
 /* Face card list in editor sidebar */
