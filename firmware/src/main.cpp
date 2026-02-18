@@ -24,6 +24,7 @@ struct CfAlert {
     uint8_t buzzCount;   // 0 = insistent (buzz loop until dismissed), N = vibMotor N pulses
     bool    fired;
     bool    preAlert;    // true = pre-alert warning, false = at event time
+    uint8_t preMin;      // pre-alert minutes (for notification header text)
     char    text[60];
     char    time[6];     // "HH:MM" for notification header
 };
@@ -32,6 +33,7 @@ RTC_DATA_ATTR int     cfAlertCount     = 0;
 RTC_DATA_ATTR bool    cfNotifActive    = false;
 RTC_DATA_ATTR bool    cfNotifInsistent = false;
 RTC_DATA_ATTR bool    cfNotifPreAlert  = false;
+RTC_DATA_ATTR uint8_t cfNotifPreMin    = 0;
 RTC_DATA_ATTR char    cfNotifText[60]  = "";
 RTC_DATA_ATTR char    cfNotifTime[6]   = "";
 
@@ -122,6 +124,7 @@ public:
                     // Both gentle and insistent show notification screen
                     cfNotifActive = true;
                     cfNotifPreAlert = cfAlerts[i].preAlert;
+                    cfNotifPreMin = cfAlerts[i].preMin;
                     strncpy(cfNotifText, cfAlerts[i].text, 59);
                     cfNotifText[59] = '\0';
                     strncpy(cfNotifTime, cfAlerts[i].time, 5);
@@ -179,6 +182,7 @@ public:
             cfNotifActive = false;
             cfNotifInsistent = false;
             cfNotifPreAlert = false;
+            cfNotifPreMin = 0;
             cfNotifText[0] = '\0';
             cfNotifTime[0] = '\0';
             cfDismissing = true; // skip sync/alerts in the redraw
@@ -250,7 +254,7 @@ private:
         display.setFont(&FreeSans9pt7b);
         char headerBuf[24];
         if (cfNotifPreAlert) {
-            strcpy(headerBuf, "In about 5 minutes");
+            snprintf(headerBuf, sizeof(headerBuf), "In about %d minutes", cfNotifPreMin);
         } else if (cfNotifTime[0]) {
             snprintf(headerBuf, sizeof(headerBuf), "At %s", cfNotifTime);
         } else {
@@ -665,13 +669,15 @@ private:
                         bool ins = alert["ins"] | false;
                         const char* txt = alert["text"] | "Event";
                         const char* evTimeStr = alert["time"] | "";
+                        int preSec = alert["pre"] | 300; // default 300s for backwards compat
 
-                        // 1. Pre-alert (5 min before event)
+                        // 1. Pre-alert (configurable minutes before event)
                         if (cfAlertCount < 20) {
-                            cfAlerts[cfAlertCount].eventTime = evTime - 300;
+                            cfAlerts[cfAlertCount].eventTime = evTime - preSec;
                             cfAlerts[cfAlertCount].buzzCount = ins ? 0 : 1;
                             cfAlerts[cfAlertCount].fired = false;
                             cfAlerts[cfAlertCount].preAlert = true;
+                            cfAlerts[cfAlertCount].preMin = preSec / 60;
                             strncpy(cfAlerts[cfAlertCount].text, txt, 59);
                             cfAlerts[cfAlertCount].text[59] = '\0';
                             strncpy(cfAlerts[cfAlertCount].time, evTimeStr, 5);
@@ -685,6 +691,7 @@ private:
                             cfAlerts[cfAlertCount].buzzCount = ins ? 0 : 3;
                             cfAlerts[cfAlertCount].fired = false;
                             cfAlerts[cfAlertCount].preAlert = false;
+                            cfAlerts[cfAlertCount].preMin = 0;
                             strncpy(cfAlerts[cfAlertCount].text, txt, 59);
                             cfAlerts[cfAlertCount].text[59] = '\0';
                             strncpy(cfAlerts[cfAlertCount].time, evTimeStr, 5);

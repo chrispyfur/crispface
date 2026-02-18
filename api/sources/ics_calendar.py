@@ -281,6 +281,7 @@ for feed in feeds:
             alert_mode = 'gentle'
     feed_alert = alert_mode in ('gentle', 'insistent')
     feed_insistent = alert_mode == 'insistent'
+    feed_alert_before = int(feed.get('alert_before', 5))
 
     if feed_alert or feed_insistent:
         any_alerts = True
@@ -299,6 +300,7 @@ for feed in feeds:
             ev['_bold'] = True
         if feed_alert or feed_insistent:
             ev['_alert'] = True
+            ev['_alert_before'] = feed_alert_before
             if feed_insistent:
                 ev['_insistent'] = True
 
@@ -351,6 +353,7 @@ if any_alerts:
             'time': dt.strftime('%H:%M'),
             'ins': bool(ev.get('_insistent')),
             'uid': uid,
+            'pre': ev.get('_alert_before', 5) * 60,
         })
     # Sort by nearest first, cap at 10
     alerts.sort(key=lambda a: a['sec'])

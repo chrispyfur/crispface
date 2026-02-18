@@ -633,6 +633,7 @@
             overlay.id = 'prop-feed-modal';
 
             var feedAlertSel = feed ? (feed.alert_mode || (feed.insistent ? 'insistent' : (feed.alert ? 'gentle' : 'none'))) : 'none';
+            var alertBeforeSel = feed && feed.alert_before ? feed.alert_before : 5;
 
             var card = document.createElement('div');
             card.className = 'prop-feed-modal-inner';
@@ -649,6 +650,13 @@
                 '<option value="gentle"' + (feedAlertSel === 'gentle' ? ' selected' : '') + '>Gentle</option>' +
                 '<option value="insistent"' + (feedAlertSel === 'insistent' ? ' selected' : '') + '>Insistent</option>' +
                 '</select></div>' +
+                '<div class="form-group" id="feed-alert-before-group" style="' + (feedAlertSel !== 'none' ? '' : 'display:none') + '">' +
+                '<label for="feed-alert-before">Alert before</label>' +
+                '<select id="feed-alert-before">' +
+                '<option value="5"' + (alertBeforeSel === 5 ? ' selected' : '') + '>5 minutes</option>' +
+                '<option value="15"' + (alertBeforeSel === 15 ? ' selected' : '') + '>15 minutes</option>' +
+                '<option value="30"' + (alertBeforeSel === 30 ? ' selected' : '') + '>30 minutes</option>' +
+                '</select></div>' +
                 '<div class="prop-feed-modal-actions">' +
                 '<button type="button" class="btn btn-primary" id="feed-save">Save</button>' +
                 '<button type="button" class="btn btn-secondary" id="feed-cancel">Cancel</button>' +
@@ -660,6 +668,12 @@
             // Focus name field
             document.getElementById('feed-name').focus();
 
+            // Toggle alert-before visibility when alert mode changes
+            document.getElementById('feed-alert-mode').addEventListener('change', function() {
+                document.getElementById('feed-alert-before-group').style.display =
+                    this.value === 'none' ? 'none' : '';
+            });
+
             document.getElementById('feed-save').addEventListener('click', function () {
                 var name = document.getElementById('feed-name').value.trim();
                 var url = document.getElementById('feed-url').value.trim();
@@ -670,7 +684,10 @@
                 if (!name) name = 'Calendar';
                 overlay.remove();
                 var feedData = { name: name, url: url, bold: bold };
-                if (alertMode !== 'none') feedData.alert_mode = alertMode;
+                if (alertMode !== 'none') {
+                    feedData.alert_mode = alertMode;
+                    feedData.alert_before = parseInt(document.getElementById('feed-alert-before').value);
+                }
                 onSave(feedData);
             });
 
