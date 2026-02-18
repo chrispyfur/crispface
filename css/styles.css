@@ -969,6 +969,7 @@ body.simulating .canvas-container-wrapper {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding-left: 4px;
 }
 
 .prop-feed-bold-badge,
