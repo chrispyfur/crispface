@@ -161,12 +161,11 @@ def format_events(events, detail, max_chars):
     lines = []
     prev_date = None
     for ev in events:
-        # Day divider: insert \x04 marker between timed events on different days
-        ev_date = ev['dtstart'].date() if not ev.get('all_day') else None
-        if ev_date and prev_date and ev_date != prev_date:
+        # Day divider: insert \x04 marker between events on different days
+        ev_date = ev['dtstart'].date()
+        if prev_date and ev_date != prev_date:
             lines.append('\x04')
-        if ev_date:
-            prev_date = ev_date
+        prev_date = ev_date
 
         subject = ev.get('summary', 'No title')
         lineBold = bool(ev.get('_bold'))
@@ -292,6 +291,13 @@ for feed in feeds:
 
     events = parse_ics_events(ics_text)
     events = filter_events(events, start, end)
+
+    # Per-feed event type filter
+    show = feed.get('show', 'all')
+    if show == 'timed':
+        events = [ev for ev in events if not ev.get('all_day')]
+    elif show == 'allday':
+        events = [ev for ev in events if ev.get('all_day')]
 
     # Tag events with per-feed flags
     for ev in events:

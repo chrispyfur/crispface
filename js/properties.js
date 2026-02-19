@@ -118,6 +118,8 @@
                             html += '<div class="prop-feed-item" data-feed-idx="' + fi + '">';
                             html += '<span class="prop-feed-name">' + escHtml(feedsList[fi].name || 'Unnamed') + '</span>';
                             if (feedsList[fi].bold) html += '<span class="prop-feed-bold-badge">BOLD</span>';
+                            if (feedsList[fi].show === 'timed') html += '<span class="prop-feed-bold-badge">TIMED</span>';
+                            if (feedsList[fi].show === 'allday') html += '<span class="prop-feed-bold-badge">ALL-DAY</span>';
                             var feedAlertMode = feedsList[fi].alert_mode || (feedsList[fi].insistent ? 'insistent' : (feedsList[fi].alert ? 'gentle' : ''));
                             if (feedAlertMode === 'gentle') html += '<span class="prop-feed-alert-badge">ALERT</span>';
                             if (feedAlertMode === 'insistent') html += '<span class="prop-feed-alert-badge">ALERT!</span>';
@@ -669,6 +671,7 @@
             var feedAlertSel = feed ? (feed.alert_mode || (feed.insistent ? 'insistent' : (feed.alert ? 'gentle' : 'none'))) : 'none';
             var alertBeforeSel = feed && feed.alert_before ? feed.alert_before : 5;
             var refreshSel = feed && feed.refresh ? feed.refresh : 30;
+            var showSel = feed && feed.show ? feed.show : 'all';
 
             var card = document.createElement('div');
             card.className = 'prop-feed-modal-inner';
@@ -679,6 +682,12 @@
                 '<div class="form-group"><label for="feed-url">Feed URL</label>' +
                 '<input type="text" id="feed-url" value="' + escHtml(feed ? feed.url : '') + '" placeholder="https://..." /></div>' +
                 '<div class="form-group"><label><input type="checkbox" id="feed-bold"' + (feed && feed.bold ? ' checked' : '') + ' /> Bold</label></div>' +
+                '<div class="form-group"><label for="feed-show">Show</label>' +
+                '<select id="feed-show">' +
+                '<option value="all"' + (showSel === 'all' ? ' selected' : '') + '>All events</option>' +
+                '<option value="timed"' + (showSel === 'timed' ? ' selected' : '') + '>Timed only</option>' +
+                '<option value="allday"' + (showSel === 'allday' ? ' selected' : '') + '>All-day only</option>' +
+                '</select></div>' +
                 '<div class="form-group"><label for="feed-refresh">Refresh</label>' +
                 '<select id="feed-refresh">' +
                 '<option value="1"' + (refreshSel === 1 ? ' selected' : '') + '>1 minute</option>' +
@@ -757,10 +766,12 @@
                 var alertMode = document.getElementById('feed-alert-mode').value;
                 if (!url) { document.getElementById('feed-url').focus(); return; }
                 if (!name) name = 'Calendar';
+                var showVal = document.getElementById('feed-show').value;
                 var refresh = parseInt(document.getElementById('feed-refresh').value);
                 var alertBefore = parseInt(document.getElementById('feed-alert-before').value);
                 overlay.remove();
                 var feedData = { name: name, url: url, bold: bold, refresh: refresh };
+                if (showVal !== 'all') feedData.show = showVal;
                 if (alertMode !== 'none') {
                     feedData.alert_mode = alertMode;
                     feedData.alert_before = alertBefore;
