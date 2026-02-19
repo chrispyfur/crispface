@@ -40,6 +40,12 @@
             "min": 5,
             "max": 50,
             "default": "20"
+        },
+        {
+            "name": "dividers",
+            "label": "Day dividers",
+            "type": "checkbox",
+            "default": "true"
         }
     ],
     "created_at": "2026-02-12T00:00:00+00:00",

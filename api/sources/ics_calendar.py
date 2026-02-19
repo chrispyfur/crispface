@@ -17,6 +17,7 @@ max_events = int(qs.get('events', ['3'])[0])
 days_ahead = int(qs.get('days', ['1'])[0])
 detail = qs.get('detail', ['title'])[0]
 max_chars = int(qs.get('maxchars', ['20'])[0])
+use_dividers = qs.get('dividers', ['true'])[0].lower() == 'true'
 
 if max_events < 1:
     max_events = 1
@@ -147,7 +148,7 @@ def truncate(text, limit):
     return text[:limit - 3] + '...'
 
 
-def format_events(events, detail, max_chars):
+def format_events(events, detail, max_chars, dividers=True):
     """Format event list into display text.
 
     All-day events get a filled circle prefix, timed events get HH:MM.
@@ -163,7 +164,7 @@ def format_events(events, detail, max_chars):
     for ev in events:
         # Day divider: insert \x04 marker between events on different days
         ev_date = ev['dtstart'].date()
-        if prev_date and ev_date != prev_date:
+        if dividers and prev_date and ev_date != prev_date:
             lines.append('\x04')
         prev_date = ev_date
 
@@ -327,7 +328,7 @@ if legacy_alert or legacy_insistent:
 all_events.sort(key=lambda e: e['dtstart'])
 all_events = all_events[:max_events]
 
-value_text = format_events(all_events, detail, max_chars)
+value_text = format_events(all_events, detail, max_chars, use_dividers)
 
 result = {'value': value_text}
 
