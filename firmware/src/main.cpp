@@ -62,8 +62,17 @@ public:
         // stays true across normal deep sleep cycles.
         #if CRISPFACE_BUILD_EPOCH > 0
         if (!cfTimeSeeded) {
+            // Try to recover last-known time from SPIFFS (more recent than build epoch)
+            time_t seedTime = CRISPFACE_BUILD_EPOCH;
+            File tf = SPIFFS.open("/last_time.txt", "r");
+            if (tf) {
+                String ts = tf.readStringUntil('\n');
+                tf.close();
+                time_t saved = (time_t)ts.toInt();
+                if (saved > seedTime) seedTime = saved;
+            }
             struct timeval tv;
-            tv.tv_sec = CRISPFACE_BUILD_EPOCH;
+            tv.tv_sec = seedTime;
             tv.tv_usec = 0;
             settimeofday(&tv, NULL);
             configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "");
@@ -71,6 +80,25 @@ public:
             cfTimeSeeded = true;
         }
         #endif
+
+        // Save current time to SPIFFS periodically so crash recovery
+        // uses a recent timestamp instead of the (potentially old) build epoch.
+        // Only write every ~10 min to reduce flash wear.
+        {
+            int nowCheck = makeTime(currentTime);
+            File tf = SPIFFS.open("/last_time.txt", "r");
+            bool needsWrite = true;
+            if (tf) {
+                String ts = tf.readStringUntil('\n');
+                tf.close();
+                int saved = ts.toInt();
+                if (saved > 0 && (nowCheck - saved) < 600) needsWrite = false;
+            }
+            if (needsWrite) {
+                File wf = SPIFFS.open("/last_time.txt", "w");
+                if (wf) { wf.println(nowCheck); wf.close(); }
+            }
+        }
 
         // If RTC was lost (e.g. hard crash), check SPIFFS for cached faces
         if (cfFaceCount == 0) {
@@ -83,7 +111,7 @@ public:
                     break;
                 }
             }
-            if (cfFaceCount > 0) cfNeedsSync = false;
+            // Faces cached but cfLastSync is 0 — force a sync to fix time
         }
 
         // First boot / reboot: show boot screen before first sync
@@ -126,8 +154,10 @@ public:
 
         // Skip sync and alert checks when redrawing after notification dismiss
         if (!cfDismissing) {
-            // Check if sync needed
-            if (cfNeedsSync || (cfLastSync > 0 && (now - cfLastSync) > cfSyncInterval)
+            // Check if sync needed — also force sync if cfLastSync is 0
+            // (crash recovery: time is seeded from SPIFFS/build epoch, needs NTP)
+            if (cfNeedsSync || cfLastSync == 0
+                || (now - cfLastSync) > cfSyncInterval
                 || cfFaceCount == 0) {
                 syncFromServer();
                 cfNeedsSync = false;
