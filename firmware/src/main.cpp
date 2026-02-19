@@ -18,6 +18,7 @@ RTC_DATA_ATTR bool cfNeedsSync   = true;  // sync on first boot
 RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
 RTC_DATA_ATTR bool cfTimeSeeded   = false; // set after build-epoch seed or NTP sync
 RTC_DATA_ATTR bool cfFirstBoot    = true;  // true until first successful sync
+RTC_DATA_ATTR int  cfLastSyncTry  = 0;     // timestamp of last sync attempt (for backoff)
 
 // ---- Alert system ----
 struct CfAlert {
@@ -155,10 +156,15 @@ public:
         // Skip sync and alert checks when redrawing after notification dismiss
         if (!cfDismissing) {
             // Check if sync needed — also force sync if cfLastSync is 0
-            // (crash recovery: time is seeded from SPIFFS/build epoch, needs NTP)
-            if (cfNeedsSync || cfLastSync == 0
-                || (now - cfLastSync) > cfSyncInterval
+            // (crash recovery: time is seeded from SPIFFS/build epoch, needs NTP).
+            // Back off to every 10 min when cfLastSync is 0 to save battery
+            // if WiFi is unavailable (e.g. out of range).
+            bool needsRecoverySync = cfLastSync == 0
+                && (cfLastSyncTry == 0 || (now - cfLastSyncTry) >= 600);
+            if (cfNeedsSync || needsRecoverySync
+                || (cfLastSync > 0 && (now - cfLastSync) > cfSyncInterval)
                 || cfFaceCount == 0) {
+                cfLastSyncTry = now;
                 syncFromServer();
                 cfNeedsSync = false;
                 // Re-read time after sync (NTP may have adjusted clock)
