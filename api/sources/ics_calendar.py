@@ -162,10 +162,11 @@ def format_events(events, detail, max_chars, dividers=True):
     lines = []
     prev_date = None
     for ev in events:
-        # Day divider: insert \x04 marker between events on different days
+        # Day divider: insert \x04 + 3-letter day name between events on different days
         ev_date = ev['dtstart'].date()
         if dividers and prev_date and ev_date != prev_date:
-            lines.append('\x04')
+            day_name = ev['dtstart'].strftime('%a')
+            lines.append('\x04' + day_name)
         prev_date = ev_date
 
         subject = ev.get('summary', 'No title')

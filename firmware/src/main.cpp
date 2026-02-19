@@ -1229,27 +1229,32 @@ private:
 
             const char* linePtr = line.c_str();
 
-            // Day divider: \x04 byte renders as ornamental ———◆——— divider
-            if ((uint8_t)linePtr[0] == 0x04 && strlen(linePtr) <= 1) {
+            // Day divider: \x04 + day name renders as ———Mon——— divider
+            if ((uint8_t)linePtr[0] == 0x04) {
+                const char* dayLabel = linePtr + 1;
                 int lineW = bw < 120 ? bw : 120;
                 int lx = bx + (bw - lineW) / 2;
+                // Use smallest font for day label
+                display.setFont(&FreeSans9pt7b);
+                int16_t dtx, dty; uint16_t dtw, dth;
+                display.getTextBounds(dayLabel, 0, 0, &dtx, &dty, &dtw, &dth);
+                int labelW = (int)dtw;
+                int labelH = (int)dth;
                 int ly = curY - ascent + 1;
-                if (ly >= by && ly + 2 < by + bh) {
-                    int cx = lx + lineW / 2;
-                    int cy = ly + 1;
-                    // Diamond: 3px tall centred ornament
-                    display.drawPixel(cx, ly, color);
-                    display.drawPixel(cx - 1, cy, color);
-                    display.drawPixel(cx, cy, color);
-                    display.drawPixel(cx + 1, cy, color);
-                    display.drawPixel(cx, ly + 2, color);
-                    // Lines on the middle row with 3px gap either side
-                    if (cx - 4 >= lx)
-                        display.drawLine(lx, cy, cx - 4, cy, color);
-                    if (cx + 4 <= lx + lineW - 1)
-                        display.drawLine(cx + 4, cy, lx + lineW - 1, cy, color);
-                }
-                curY += 7;  // 1px pad + 3px ornament + 3px pad
+                int cy = ly + labelH / 2;
+                int labelX = bx + (bw - labelW) / 2;
+                // Draw day label centred
+                display.setCursor(labelX, ly + labelH);
+                display.setTextColor(color);
+                display.print(dayLabel);
+                // Lines either side with 3px gap
+                int gap = 3;
+                if (labelX - gap - 1 >= lx)
+                    display.drawLine(lx, cy, labelX - gap - 1, cy, color);
+                if (labelX + labelW + gap <= lx + lineW - 1)
+                    display.drawLine(labelX + labelW + gap, cy, lx + lineW - 1, cy, color);
+                curY += labelH + 4;
+                display.setFont(font);
                 firstLine = false;
                 continue;
             }
@@ -1363,27 +1368,29 @@ private:
 
             const char* linePtr = line.c_str();
 
-            // Day divider: \x04 byte renders as ornamental ———◆——— divider
-            if ((uint8_t)linePtr[0] == 0x04 && strlen(linePtr) <= 1) {
+            // Day divider: \x04 + day name renders as ———Mon——— divider
+            if ((uint8_t)linePtr[0] == 0x04) {
+                const char* dayLabel = linePtr + 1;
                 int lineW = bw < 120 ? bw : 120;
                 int lx = bx + (bw - lineW) / 2;
+                display.setFont(&FreeSans9pt7b);
+                int16_t dtx, dty; uint16_t dtw, dth;
+                display.getTextBounds(dayLabel, 0, 0, &dtx, &dty, &dtw, &dth);
+                int labelW = (int)dtw;
+                int labelH = (int)dth;
                 int ly = curY - ascent + 1;
-                if (ly >= by && ly + 2 < by + bh) {
-                    int cx = lx + lineW / 2;
-                    int cy = ly + 1;
-                    // Diamond: 3px tall centred ornament
-                    display.drawPixel(cx, ly, color);
-                    display.drawPixel(cx - 1, cy, color);
-                    display.drawPixel(cx, cy, color);
-                    display.drawPixel(cx + 1, cy, color);
-                    display.drawPixel(cx, ly + 2, color);
-                    // Lines on the middle row with 3px gap either side
-                    if (cx - 4 >= lx)
-                        display.drawLine(lx, cy, cx - 4, cy, color);
-                    if (cx + 4 <= lx + lineW - 1)
-                        display.drawLine(cx + 4, cy, lx + lineW - 1, cy, color);
-                }
-                curY += 7;  // 1px pad + 3px ornament + 3px pad
+                int cy = ly + labelH / 2;
+                int labelX = bx + (bw - labelW) / 2;
+                display.setCursor(labelX, ly + labelH);
+                display.setTextColor(color);
+                display.print(dayLabel);
+                int gap = 3;
+                if (labelX - gap - 1 >= lx)
+                    display.drawLine(lx, cy, labelX - gap - 1, cy, color);
+                if (labelX + labelW + gap <= lx + lineW - 1)
+                    display.drawLine(labelX + labelW + gap, cy, lx + lineW - 1, cy, color);
+                curY += labelH + 4;
+                display.setFont(font);
                 firstLine = false;
                 continue;
             }

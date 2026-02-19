@@ -536,6 +536,15 @@ body.editor-page .main-content {
     flex: 1;
 }
 
+/* Watch frame around preview canvas (matches simulation body) */
+body:not(.simulating) .canvas-container-wrapper .canvas-container {
+    padding: 20px;
+    background: #333;
+    border-radius: 12px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+    box-sizing: content-box;
+}
+
 .canvas-container-wrapper canvas {
     image-rendering: pixelated;
     image-rendering: -moz-crisp-edges;

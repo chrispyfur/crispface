@@ -247,19 +247,26 @@
                 if (curY - ascent >= iy + ih) break;
                 var lineText = lines[li];
 
-                // Day divider
-                if (lineText.charCodeAt(0) === 4 && lineText.length <= 1) {
+                // Day divider: \x04 + day name renders as ———Mon———
+                if (lineText.charCodeAt(0) === 4) {
+                    var dayLabel = lineText.substring(1);
                     var divW = Math.min(iw, 120);
                     var dlx = ix + Math.round((iw - divW) / 2);
                     var dly = curY - ascent + 1;
-                    var dcx = dlx + Math.round(divW / 2);
-                    var dcy = dly + 1;
-                    ctx.fillRect(dcx, dly, 1, 1);
-                    ctx.fillRect(dcx - 1, dcy, 3, 1);
-                    ctx.fillRect(dcx, dly + 2, 1, 1);
-                    if (dcx - 4 >= dlx) ctx.fillRect(dlx, dcy, dcx - 4 - dlx + 1, 1);
-                    if (dcx + 4 <= dlx + divW - 1) ctx.fillRect(dcx + 4, dcy, dlx + divW - 1 - (dcx + 4) + 1, 1);
-                    curY += 7;
+                    ctx.save();
+                    ctx.font = '9px sans-serif';
+                    var labelW = ctx.measureText(dayLabel).width;
+                    var labelH = 9;
+                    var dcy = dly + Math.round(labelH / 2);
+                    var labelX = ix + Math.round((iw - labelW) / 2);
+                    ctx.fillText(dayLabel, labelX, dly + labelH);
+                    var gap = 3;
+                    if (labelX - gap - 1 >= dlx)
+                        ctx.fillRect(dlx, dcy, labelX - gap - dlx, 1);
+                    if (labelX + labelW + gap <= dlx + divW - 1)
+                        ctx.fillRect(labelX + labelW + gap, dcy, dlx + divW - 1 - (labelX + labelW + gap) + 1, 1);
+                    ctx.restore();
+                    curY += labelH + 4;
                     continue;
                 }
 
@@ -647,23 +654,26 @@
                         if (curY - ascent >= iy + ih) break;
                         var lineText = lines[li];
 
-                        // Day divider: \x04 renders as ornamental ———◆——— line
-                        if (lineText.charCodeAt(0) === 4 && lineText.length <= 1) {
+                        // Day divider: \x04 + day name renders as ———Mon———
+                        if (lineText.charCodeAt(0) === 4) {
+                            var dayLabel = lineText.substring(1);
                             var divW = Math.min(iw, 120);
                             var dlx = ix + Math.round((iw - divW) / 2);
                             var dly = curY - ascent + 1;
-                            var dcx = dlx + Math.round(divW / 2);
-                            var dcy = dly + 1;
-                            // Diamond
-                            ctx.fillRect(dcx, dly, 1, 1);
-                            ctx.fillRect(dcx - 1, dcy, 3, 1);
-                            ctx.fillRect(dcx, dly + 2, 1, 1);
-                            // Lines either side
-                            if (dcx - 4 >= dlx)
-                                ctx.fillRect(dlx, dcy, dcx - 4 - dlx + 1, 1);
-                            if (dcx + 4 <= dlx + divW - 1)
-                                ctx.fillRect(dcx + 4, dcy, dlx + divW - 1 - (dcx + 4) + 1, 1);
-                            curY += 7;
+                            ctx.save();
+                            ctx.font = '9px sans-serif';
+                            var labelW = ctx.measureText(dayLabel).width;
+                            var labelH = 9;
+                            var dcy = dly + Math.round(labelH / 2);
+                            var labelX = ix + Math.round((iw - labelW) / 2);
+                            ctx.fillText(dayLabel, labelX, dly + labelH);
+                            var gap = 3;
+                            if (labelX - gap - 1 >= dlx)
+                                ctx.fillRect(dlx, dcy, labelX - gap - dlx, 1);
+                            if (labelX + labelW + gap <= dlx + divW - 1)
+                                ctx.fillRect(labelX + labelW + gap, dcy, dlx + divW - 1 - (labelX + labelW + gap) + 1, 1);
+                            ctx.restore();
+                            curY += labelH + 4;
                             continue;
                         }
 
