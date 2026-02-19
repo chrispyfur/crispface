@@ -267,6 +267,7 @@ public:
 
         // Watchface state — our custom button handling
         if (wakeupBit & MENU_BTN_MASK) {
+            cfFaceChanging = true; // skip sync when returning from menu
             Watchy::handleButtonPress(); // opens stock menu
         }
         else if (wakeupBit & UP_BTN_MASK) {
