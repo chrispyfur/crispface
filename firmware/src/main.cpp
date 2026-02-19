@@ -1238,21 +1238,25 @@ private:
                 display.setFont(&FreeSans9pt7b);
                 int16_t dtx, dty; uint16_t dtw, dth;
                 display.getTextBounds(dayLabel, 0, 0, &dtx, &dty, &dtw, &dth);
-                int labelW = (int)dtw;
+                int divAscent = -(int)dty;
                 int labelH = (int)dth;
+                // Visual text spans from cursor+dtx to cursor+dtx+dtw
+                // Centre the visual text within bw
+                int cursorX = bx + (bw - (int)dtw) / 2 - (int)dtx;
+                int textLeft = cursorX + (int)dtx;
+                int textRight = textLeft + (int)dtw;
                 int ly = curY - ascent + 1;
+                int baseline = ly + divAscent;
                 int cy = ly + labelH / 2;
-                int labelX = bx + (bw - labelW) / 2;
-                // Draw day label centred
-                display.setCursor(labelX, ly + labelH);
+                display.setCursor(cursorX, baseline);
                 display.setTextColor(color);
                 display.print(dayLabel);
                 // Lines either side with 3px gap
                 int gap = 3;
-                if (labelX - gap - 1 >= lx)
-                    display.drawLine(lx, cy, labelX - gap - 1, cy, color);
-                if (labelX + labelW + gap <= lx + lineW - 1)
-                    display.drawLine(labelX + labelW + gap, cy, lx + lineW - 1, cy, color);
+                if (textLeft - gap - 1 >= lx)
+                    display.drawLine(lx, cy, textLeft - gap - 1, cy, color);
+                if (textRight + gap <= lx + lineW - 1)
+                    display.drawLine(textRight + gap, cy, lx + lineW - 1, cy, color);
                 curY += labelH + 4;
                 display.setFont(font);
                 firstLine = false;
@@ -1376,19 +1380,22 @@ private:
                 display.setFont(&FreeSans9pt7b);
                 int16_t dtx, dty; uint16_t dtw, dth;
                 display.getTextBounds(dayLabel, 0, 0, &dtx, &dty, &dtw, &dth);
-                int labelW = (int)dtw;
+                int divAscent = -(int)dty;
                 int labelH = (int)dth;
+                int cursorX = bx + (bw - (int)dtw) / 2 - (int)dtx;
+                int textLeft = cursorX + (int)dtx;
+                int textRight = textLeft + (int)dtw;
                 int ly = curY - ascent + 1;
+                int baseline = ly + divAscent;
                 int cy = ly + labelH / 2;
-                int labelX = bx + (bw - labelW) / 2;
-                display.setCursor(labelX, ly + labelH);
+                display.setCursor(cursorX, baseline);
                 display.setTextColor(color);
                 display.print(dayLabel);
                 int gap = 3;
-                if (labelX - gap - 1 >= lx)
-                    display.drawLine(lx, cy, labelX - gap - 1, cy, color);
-                if (labelX + labelW + gap <= lx + lineW - 1)
-                    display.drawLine(labelX + labelW + gap, cy, lx + lineW - 1, cy, color);
+                if (textLeft - gap - 1 >= lx)
+                    display.drawLine(lx, cy, textLeft - gap - 1, cy, color);
+                if (textRight + gap <= lx + lineW - 1)
+                    display.drawLine(textRight + gap, cy, lx + lineW - 1, cy, color);
                 curY += labelH + 4;
                 display.setFont(font);
                 firstLine = false;
