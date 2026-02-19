@@ -19,6 +19,8 @@ RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
 RTC_DATA_ATTR bool cfTimeSeeded   = false; // set after build-epoch seed or NTP sync
 RTC_DATA_ATTR bool cfFirstBoot    = true;  // true until first successful sync
 RTC_DATA_ATTR int  cfLastSyncTry  = 0;     // timestamp of last sync attempt (for backoff)
+RTC_DATA_ATTR bool cfFaceChanging = false; // skip sync when cycling faces
+RTC_DATA_ATTR int  cfSyncFails    = 0;     // consecutive sync failures (for progressive backoff)
 
 // ---- Alert system ----
 struct CfAlert {
@@ -45,6 +47,14 @@ public:
     bool cfDismissing = false; // skip sync/alerts during notification dismiss redraw
 
     CrispFace(const watchySettings &s) : Watchy(s) {}
+
+    // Progressive backoff: 0→0s, 1→15min, 2→30min, 3+→1hr
+    int cfBackoffSeconds() {
+        if (cfSyncFails <= 0) return 0;
+        if (cfSyncFails == 1) return 900;
+        if (cfSyncFails == 2) return 1800;
+        return 3600;
+    }
 
     void drawWatchFace() {
         // Mount SPIFFS every wake — it's unmounted after deep sleep
@@ -153,17 +163,23 @@ public:
 
         int now = makeTime(currentTime);
 
-        // Skip sync and alert checks when redrawing after notification dismiss
-        if (!cfDismissing) {
+        // Skip sync and alert checks when redrawing after notification dismiss or face change
+        if (!cfDismissing && !cfFaceChanging) {
             // Check if sync needed — also force sync if cfLastSync is 0
             // (crash recovery: time is seeded from SPIFFS/build epoch, needs NTP).
-            // Back off to every 10 min when cfLastSync is 0 to save battery
-            // if WiFi is unavailable (e.g. out of range).
-            bool needsRecoverySync = cfLastSync == 0
-                && (cfLastSyncTry == 0 || (now - cfLastSyncTry) >= 600);
+            // Progressive backoff: 0 fails=immediate, 1=15min, 2=30min, 3+=1hr
+            int backoff = cfBackoffSeconds();
+            bool withinBackoff = backoff > 0 && cfLastSyncTry > 0
+                && (now - cfLastSyncTry) < backoff;
+
+            bool needsRecoverySync = cfLastSync == 0 && !withinBackoff;
+            bool needsStaleSync = cfLastSync > 0
+                && (now - cfLastSync) > cfSyncInterval && !withinBackoff;
+            bool needsFacesSync = cfFaceCount == 0 && !withinBackoff;
+
+            // Manual sync (cfNeedsSync) is NEVER gated by backoff
             if (cfNeedsSync || needsRecoverySync
-                || (cfLastSync > 0 && (now - cfLastSync) > cfSyncInterval)
-                || cfFaceCount == 0) {
+                || needsStaleSync || needsFacesSync) {
                 cfLastSyncTry = now;
                 syncFromServer();
                 cfNeedsSync = false;
@@ -211,6 +227,7 @@ public:
             }
         }
         cfDismissing = false;
+        cfFaceChanging = false;
 
         // Render current face from SPIFFS
         if (cfFaceCount > 0) {
@@ -258,6 +275,7 @@ public:
                 if (cfFaceIndex < 0) cfFaceIndex = cfFaceCount - 1;
             }
             RTC.read(currentTime);
+            cfFaceChanging = true;
             showWatchFace(true);
         }
         else if (wakeupBit & DOWN_BTN_MASK) {
@@ -266,6 +284,7 @@ public:
                 if (cfFaceIndex >= cfFaceCount) cfFaceIndex = 0;
             }
             RTC.read(currentTime);
+            cfFaceChanging = true;
             showWatchFace(true);
         }
         else if (wakeupBit & BACK_BTN_MASK) {
@@ -554,9 +573,15 @@ private:
         syncProgress(5);
 
         if (!cfConnectWiFi(debug)) {
+            cfSyncFails++;
             if (debug) {
                 dbg += cfDebugWifi;
                 dbg += "RESULT: WiFi FAILED\n";
+                dbg += "Fails: ";
+                dbg += String(cfSyncFails);
+                dbg += " Backoff: ";
+                dbg += String(cfBackoffSeconds());
+                dbg += "s\n";
                 renderDebug(dbg);
             }
             syncProgress(0);
@@ -606,10 +631,16 @@ private:
             cfSyncNTP();
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
+            cfSyncFails++;
             if (debug) {
                 dbg += "HTTP: ";
                 dbg += String(httpCode);
                 dbg += " FAILED\n";
+                dbg += "Fails: ";
+                dbg += String(cfSyncFails);
+                dbg += " Backoff: ";
+                dbg += String(cfBackoffSeconds());
+                dbg += "s\n";
                 renderDebug(dbg);
             }
             syncProgress(0);
@@ -634,6 +665,7 @@ private:
             payload = "";
 
             if (err || !doc["success"].as<bool>()) {
+                cfSyncFails++;
                 if (debug) {
                     dbg += "HTTP: 200 OK\n";
                     dbg += "Body: ";
@@ -646,6 +678,11 @@ private:
                     } else {
                         dbg += "API: success=false\n";
                     }
+                    dbg += "Fails: ";
+                    dbg += String(cfSyncFails);
+                    dbg += " Backoff: ";
+                    dbg += String(cfBackoffSeconds());
+                    dbg += "s\n";
                     renderDebug(dbg);
                 }
                 syncProgress(0);
@@ -655,9 +692,15 @@ private:
             JsonArray faces = doc["faces"].as<JsonArray>();
             int total = faces.size();
             if (total == 0) {
+                cfSyncFails++;
                 if (debug) {
                     dbg += "HTTP: 200 OK\n";
                     dbg += "Faces: 0 (empty)\n";
+                    dbg += "Fails: ";
+                    dbg += String(cfSyncFails);
+                    dbg += " Backoff: ";
+                    dbg += String(cfBackoffSeconds());
+                    dbg += "s\n";
                     renderDebug(dbg);
                 }
                 syncProgress(0);
@@ -710,6 +753,7 @@ private:
             // (user can always manual-sync via top-left button)
             cfSyncInterval = anyServerComp ? (minServerStale > 60 ? minServerStale : 60) : 86400;
             cfLastSync     = (int)makeTime(currentTime);
+            cfSyncFails    = 0; // reset backoff on success
 
             // Collect alerts from all faces — two per event (pre-alert + event-time)
             cfAlertCount = 0;
@@ -770,6 +814,10 @@ private:
             dbg += String(cfFaceCount);
             dbg += "\nInterval: ";
             dbg += String(cfSyncInterval);
+            dbg += "s\nFails: ";
+            dbg += String(cfSyncFails);
+            dbg += " Backoff: ";
+            dbg += String(cfBackoffSeconds());
             dbg += "s\n";
             renderDebug(dbg);
         }

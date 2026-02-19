@@ -305,6 +305,7 @@
     function createFaceCard(face, watchId) {
         var card = document.createElement('div');
         card.className = 'face-card';
+        if (face.disabled) card.classList.add('face-card-disabled');
         card.setAttribute('draggable', 'true');
         card.setAttribute('data-face-id', face.id);
 

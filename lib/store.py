@@ -70,6 +70,7 @@ def create_face(name, user):
         'slug': _slugify(name),
         'name': name,
         'background': 'white',
+        'disabled': False,
         'controls': [],
         'complications': [],
         'sort_order': max_order + 1,
@@ -93,6 +94,8 @@ def save_face(face_id, data, user):
         existing['slug'] = re.sub(r'[^a-z0-9-]', '', str(data['slug']).lower())[:50] or existing['slug']
     if 'background' in data and data['background'] in ('black', 'white'):
         existing['background'] = data['background']
+    if 'disabled' in data:
+        existing['disabled'] = bool(data['disabled'])
     if 'sort_order' in data:
         existing['sort_order'] = int(data['sort_order'])
     if 'complications' in data:

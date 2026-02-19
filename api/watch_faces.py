@@ -132,6 +132,9 @@ for face_id in face_ids:
     with open(face_file, 'r') as f:
         face = json.load(f)
 
+    if face.get('disabled', False):
+        continue
+
     resolved_complications = []
     for comp in face.get('complications', []):
         content = comp.get('content', {})

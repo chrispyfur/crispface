@@ -607,6 +607,18 @@ body.editor-page .main-content {
     text-align: center;
 }
 
+/* Disabled face cards */
+.face-card-list .face-card-disabled,
+.face-list .face-card-disabled,
+.face-grid .face-card-disabled {
+    opacity: 0.4;
+}
+
+.face-card-disabled .face-card-name::after {
+    content: ' (off)';
+    color: var(--gray-medium);
+}
+
 /* Face card list in editor sidebar */
 .face-card-list {
     display: flex;

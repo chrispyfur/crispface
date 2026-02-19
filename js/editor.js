@@ -844,6 +844,8 @@
         document.getElementById('face-name').value = face.name || '';
         var bgSelect = document.getElementById('face-background');
         bgSelect.value = face.background || 'black';
+        var disabledCb = document.getElementById('face-disabled');
+        if (disabledCb) disabledCb.checked = !!face.disabled;
 
         updateRefreshList(face);
     }
@@ -953,6 +955,7 @@
                 var face = faces[i];
                 var card = document.createElement('div');
                 card.className = 'face-card' + (face.id === currentId ? ' face-card-active' : '');
+                if (face.disabled) card.classList.add('face-card-disabled');
                 if (animateNew && face.id === currentId) {
                     card.classList.add('face-card-enter');
                 }
@@ -1204,10 +1207,12 @@
             complications.push(comp);
         }
 
+        var disabledCb = document.getElementById('face-disabled');
         return {
             id: CF.faceId,
             name: document.getElementById('face-name').value,
             background: document.getElementById('face-background').value,
+            disabled: disabledCb ? disabledCb.checked : false,
             complications: complications
         };
     }
