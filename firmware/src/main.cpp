@@ -489,7 +489,8 @@ private:
         f.close();
         if (err) return 0;
 
-        JsonArray arr = doc.as<JsonArray>();
+        // WiFi stored as {"n":[...]} object wrapper
+        JsonArray arr = doc["n"].as<JsonArray>();
         if (arr.isNull()) return 0;
 
         int count = 0;
@@ -819,7 +820,7 @@ private:
         syncProgress(50);
 
         {
-            DynamicJsonDocument doc(16384);
+            DynamicJsonDocument doc(32768);
             DeserializationError err = deserializeJson(doc, payload);
             int payloadLen = payload.length();
             payload = "";
@@ -851,9 +852,14 @@ private:
 
             // Save WiFi networks to SPIFFS (allows OTA WiFi updates)
             JsonArray wifiArr = doc["wifi"].as<JsonArray>();
-            if (!wifiArr.isNull()) {
+            if (!wifiArr.isNull() && wifiArr.size() > 0) {
                 File wf = SPIFFS.open("/wifi.json", FILE_WRITE);
-                if (wf) { serializeJson(wifiArr, wf); wf.close(); }
+                if (wf) {
+                    wf.print("{\"n\":");
+                    serializeJson(wifiArr, wf);
+                    wf.print("}");
+                    wf.close();
+                }
             }
 
             JsonArray faces = doc["faces"].as<JsonArray>();

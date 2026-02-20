@@ -278,7 +278,7 @@ for face in faces:
 
 respond({
     'success': True,
-    'faces': faces,
     'wifi': watch.get('wifi_networks', []),
     'fetched_at': int(time.time()),
+    'faces': faces,
 })
