@@ -1,12 +1,14 @@
 # CrispFace
 
-Watch face editor for the [Watchy](https://watchy.sqfmi.com/) ESP32-S3 e-paper smartwatch.
+A custom watch face editor and firmware for the [Watchy](https://watchy.sqfmi.com/) ESP32-S3 e-paper smartwatch by [SQFMI](https://github.com/sqfmi/Watchy).
 
 Design watch faces in a browser, flash the firmware once over USB, and you're done — the watch syncs face layouts, complication data, and even WiFi credentials over the air. Edit a face, rearrange complications, add a new calendar feed, whatever — the watch picks up the changes on its next WiFi sync. No need to plug it in again.
 
 ![Watchy running CrispFace](Documentation/watchy-crispface.jpg)
 
 The server does all the heavy lifting. It resolves weather, calendar events, and other dynamic data before sending anything to the watch. The watch is a thin client — it renders what it's told and goes back to sleep.
+
+CrispFace extends the [stock Watchy firmware](https://github.com/sqfmi/Watchy) — the `CrispFace` class inherits from `Watchy` and overrides `drawWatchFace()` and `handleButtonPress()` to add server-synced faces, complications, and alerts. Everything else — deep sleep, RTC alarms, the settings menu, NTP time sync — comes from the Watchy base class.
 
 ## How It Works
 
@@ -25,6 +27,10 @@ The web editor gives you a 200x200 pixel [Fabric.js](http://fabricjs.com/) canva
 
 The watch wakes every 60 seconds (Watchy's built-in RTC alarm) and on any button press. Each wake, it checks whether its cached data is stale and syncs from the server if needed. WiFi is connected only for the duration of the HTTPS request, then killed immediately. Faces are cached on SPIFFS, so even without WiFi the watch keeps showing the last-synced data.
 
+### Sync Timing
+
+Each complication has its own refresh interval (configured in the editor, in minutes). The firmware's auto-sync interval is driven by the shortest refresh interval across all server-side complications on the current watch — so a face with a 1-minute weather update and a 30-minute calendar will sync every 60 seconds. If a watch only has local complications (time, date, battery), the firmware skips server syncs entirely and just re-renders from hardware — no WiFi, maximum battery life. You can always force an immediate sync by pressing top-left regardless of the interval.
+
 ## Features
 
 - **Visual face editor** — Fabric.js canvas with pixel-accurate bitmap font preview matching the watch display
@@ -35,6 +41,7 @@ The watch wakes every 60 seconds (Watchy's built-in RTC alarm) and on any button
 - **OTA config** — WiFi credentials and face changes are synced over the air, no reflashing needed
 - **Build-on-demand** — compile firmware from the browser, flash via Web Serial (Chrome/Edge)
 - **Multi-user** — admin and user roles, flat-file JSON storage, no database required
+- **Per-complication refresh intervals** — each complication has its own refresh rate; the firmware auto-syncs based on the shortest one, keeping WiFi usage (and battery drain) to the minimum needed
 - **Stale data indication** — server complications past their freshness window render in fake italic (per-row pixel shear)
 - **Parallel source resolution** — server fetches weather, calendar, etc. concurrently during sync for faster responses
 
@@ -57,7 +64,7 @@ New complication sources are Python CGI scripts that return `{"value": "..."}`. 
 - **Server**: PHP (page serving, firmware builds), Python 3 CGI (all API endpoints, routed via `router.php`)
 - **Editor**: [Fabric.js](http://fabricjs.com/) canvas, vanilla JS, canvas 2D text rendering with GFX metrics lookup
 - **Storage**: Flat-file JSON in `data/` — no MySQL, no Redis, no external dependencies
-- **Firmware**: C++ on ESP32-S3 (PlatformIO), single `main.cpp`, extends Watchy base class
+- **Firmware**: C++ on ESP32-S3 (PlatformIO), single `main.cpp`, extends [SQFMI's Watchy](https://github.com/sqfmi/Watchy) base class
 - **Fonts**: FreeSans, FreeSerif (regular + bold, 9/12/18/24/36/48pt) + Tamzen bitmap monospace (regular + bold, all sizes)
 
 ## Project Structure
