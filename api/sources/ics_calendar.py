@@ -8,7 +8,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
 CACHE_DIR = os.path.join(DATA_DIR, 'cache')
-CACHE_MAX_AGE = 10  # short TTL — just deduplicates same URL within a single sync request
 
 
 # Parse query parameters
@@ -210,37 +209,12 @@ def format_events(events, detail, max_chars, dividers=True):
     return '\n'.join(lines) if lines else 'No events'
 
 
-# ---- Caching (per-URL) ----
-
-def get_cached(url):
-    url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
-    cache_file = os.path.join(CACHE_DIR, 'ical_{}.json'.format(url_hash))
-    if not os.path.exists(cache_file):
-        return None, cache_file
-    try:
-        with open(cache_file, 'r') as f:
-            cached = json.load(f)
-        if time.time() - cached.get('_fetched', 0) < CACHE_MAX_AGE:
-            return cached.get('_ics_text'), cache_file
-    except Exception:
-        pass
-    return None, cache_file
-
-
-def save_cache(cache_file, ics_text):
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    try:
-        with open(cache_file, 'w') as f:
-            json.dump({'_fetched': time.time(), '_ics_text': ics_text}, f)
-    except Exception:
-        pass
-
+# ---- Fetch ICS (always fresh, cache only as network-error fallback) ----
 
 def fetch_ics(url):
-    """Fetch ICS text from URL with caching."""
-    ics_text, cache_file = get_cached(url)
-    if ics_text:
-        return ics_text
+    """Fetch ICS text from URL. Caches last successful fetch as fallback."""
+    url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+    cache_file = os.path.join(CACHE_DIR, 'ical_{}.json'.format(url_hash))
 
     try:
         req = urllib.request.Request(url, headers={
@@ -248,10 +222,16 @@ def fetch_ics(url):
         })
         with urllib.request.urlopen(req, timeout=10) as resp:
             ics_text = resp.read().decode('utf-8', errors='replace')
-        save_cache(cache_file, ics_text)
+        # Save for fallback on future network failures
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump({'_ics_text': ics_text}, f)
+        except Exception:
+            pass
         return ics_text
     except Exception:
-        # Try stale cache on failure
+        # Network failed — try last known good data
         if os.path.exists(cache_file):
             try:
                 with open(cache_file, 'r') as f:
