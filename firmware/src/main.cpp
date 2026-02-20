@@ -1018,38 +1018,87 @@ private:
     // ---- Debug display ----
 
     void renderDebug(String &info) {
-        display.setFullWindow();
-        display.fillScreen(GxEPD_WHITE);
-        display.setTextColor(GxEPD_BLACK);
         display.setFont(&FreeSans9pt7b);
-
         int16_t tx, ty;
         uint16_t tw, th;
         display.getTextBounds("Ay", 0, 0, &tx, &ty, &tw, &th);
         int ascent = -(int)ty;
         int lineH = (int)th + 3;
 
-        // Print line by line
-        int y = ascent + 2;
+        // Split into lines
+        const int maxLines = 40;
+        String lines[maxLines];
+        int lineCount = 0;
         int idx = 0;
-        while (idx < (int)info.length() && y < 196) {
+        while (idx < (int)info.length() && lineCount < maxLines) {
             int nl = info.indexOf('\n', idx);
             String line = (nl < 0) ? info.substring(idx) : info.substring(idx, nl);
             idx = (nl < 0) ? info.length() : nl + 1;
-
-            // Truncate long lines to fit 200px (~25 chars at 9pt)
             if (line.length() > 25) line = line.substring(0, 25);
-
-            display.setCursor(2, y);
-            display.print(line);
-            y += lineH;
+            lines[lineCount++] = line;
         }
 
-        // Show version at bottom
-        display.setCursor(2, 194);
-        display.print("v" CRISPFACE_VERSION " DBG");
+        // Calculate lines per page (reserve bottom line for version/page)
+        int linesPerPage = (194 - (ascent + 2)) / lineH;
+        int totalPages = (lineCount + linesPerPage - 1) / linesPerPage;
+        if (totalPages < 1) totalPages = 1;
 
-        display.display(true); // partial refresh
+        // Enable buttons for dismiss polling
+        pinMode(UP_BTN_PIN, INPUT_PULLUP);
+        pinMode(DOWN_BTN_PIN, INPUT_PULLUP);
+        pinMode(BACK_BTN_PIN, INPUT_PULLUP);
+        pinMode(MENU_BTN_PIN, INPUT_PULLUP);
+
+        int page = 0;
+        bool firstRender = true;
+        while (true) {
+            int startLine = page * linesPerPage;
+            int endLine = startLine + linesPerPage;
+            if (endLine > lineCount) endLine = lineCount;
+
+            display.setFullWindow();
+            display.fillScreen(GxEPD_WHITE);
+            display.setTextColor(GxEPD_BLACK);
+            display.setFont(&FreeSans9pt7b);
+
+            int y = ascent + 2;
+            for (int i = startLine; i < endLine; i++) {
+                display.setCursor(2, y);
+                display.print(lines[i]);
+                y += lineH;
+            }
+
+            // Bottom: version + page indicator
+            display.setCursor(2, 194);
+            if (totalPages > 1) {
+                display.print("v" CRISPFACE_VERSION " [");
+                display.print(page + 1);
+                display.print("/");
+                display.print(totalPages);
+                display.print("]");
+            } else {
+                display.print("v" CRISPFACE_VERSION " DBG");
+            }
+
+            display.display(!firstRender); // full refresh first time, partial after
+            firstRender = false;
+
+            // Single page — no cycling needed
+            if (totalPages <= 1) return;
+
+            // Wait 3s, polling for button dismiss every 100ms
+            for (int i = 0; i < 30; i++) {
+                delay(100);
+                if (digitalRead(UP_BTN_PIN) == LOW ||
+                    digitalRead(DOWN_BTN_PIN) == LOW ||
+                    digitalRead(BACK_BTN_PIN) == LOW ||
+                    digitalRead(MENU_BTN_PIN) == LOW) {
+                    return;
+                }
+            }
+
+            page = (page + 1) % totalPages;
+        }
     }
 
     // ---- Render face from SPIFFS ----
