@@ -116,8 +116,193 @@ def parse_ics_events(ics_text):
                 event['description'] = value.replace('\\n', '\n').replace('\\,', ',')
             elif prop_name == 'TRANSP':
                 event['transp'] = value.strip().upper()
+            elif prop_name == 'RRULE':
+                event['rrule'] = value
+            elif prop_name == 'EXDATE':
+                exdates = event.get('exdates', set())
+                for part in value.split(','):
+                    part = part.strip()
+                    if part:
+                        exdates.add(part[:8])  # Just YYYYMMDD
+                event['exdates'] = exdates
 
     return events
+
+
+def parse_rrule(rrule_str):
+    """Parse RRULE value string into a dict, e.g. {"FREQ": "YEARLY", "INTERVAL": "1"}."""
+    parts = {}
+    for part in rrule_str.split(';'):
+        if '=' in part:
+            k, v = part.split('=', 1)
+            parts[k.upper()] = v
+    return parts
+
+
+def expand_recurring(events, window_start, window_end):
+    """Expand recurring events (RRULE) into concrete occurrences within the window."""
+    result = []
+    for ev in events:
+        if 'rrule' not in ev:
+            result.append(ev)
+            continue
+
+        rule = parse_rrule(ev['rrule'])
+        freq = rule.get('FREQ', '').upper()
+        interval = int(rule.get('INTERVAL', '1'))
+        if interval < 1:
+            interval = 1
+
+        dtstart = ev.get('dtstart')
+        if not dtstart:
+            continue
+
+        # Event duration (preserve for each occurrence)
+        dtend = ev.get('dtend', dtstart)
+        duration = dtend - dtstart
+
+        # UNTIL limit
+        until = None
+        if 'UNTIL' in rule:
+            until = parse_ics_datetime(rule['UNTIL'])
+
+        # COUNT limit
+        count = int(rule['COUNT']) if 'COUNT' in rule else None
+
+        exdates = ev.get('exdates', set())
+
+        # Generate occurrences — jump near window to avoid iterating from distant past
+        occurrences = 0  # Total from original dtstart (for COUNT)
+
+        if freq == 'YEARLY':
+            # Start from window_start year minus 1 to catch events that span into window
+            first_year = window_start.year - 1
+            # Count how many occurrences from dtstart to first_year
+            if first_year > dtstart.year:
+                years_skip = first_year - dtstart.year
+                occurrences = years_skip // interval
+                year = dtstart.year + (occurrences * interval)
+            else:
+                year = dtstart.year
+
+            while year <= window_end.year + 1:
+                occ_start = dtstart.replace(year=year)
+                occ_end = occ_start + duration
+
+                if until and occ_start > until:
+                    break
+                if count is not None and occurrences >= count:
+                    break
+
+                occurrences += 1
+
+                if occ_start > window_end:
+                    break
+
+                if occ_end >= window_start and occ_start <= window_end:
+                    date_key = occ_start.strftime('%Y%m%d')
+                    if date_key not in exdates:
+                        occ = dict(ev)
+                        occ['dtstart'] = occ_start
+                        occ['dtend'] = occ_end
+                        occ.pop('rrule', None)
+                        occ.pop('exdates', None)
+                        result.append(occ)
+
+                year += interval
+
+        elif freq == 'MONTHLY':
+            # Jump near window start
+            months_from_start = (window_start.year - dtstart.year) * 12 + (window_start.month - dtstart.month)
+            if months_from_start > interval:
+                skip = (months_from_start - 1) // interval
+                occurrences = skip
+            else:
+                skip = 0
+
+            step = skip * interval
+            cur_year = dtstart.year + (dtstart.month - 1 + step) // 12
+            cur_month = (dtstart.month - 1 + step) % 12 + 1
+
+            for _ in range(60):  # Safety limit
+                try:
+                    occ_start = dtstart.replace(year=cur_year, month=cur_month)
+                except ValueError:
+                    # Day doesn't exist in this month (e.g., Jan 31 → Feb), skip
+                    cur_month += interval
+                    if cur_month > 12:
+                        cur_year += (cur_month - 1) // 12
+                        cur_month = (cur_month - 1) % 12 + 1
+                    occurrences += 1
+                    continue
+
+                occ_end = occ_start + duration
+
+                if until and occ_start > until:
+                    break
+                if count is not None and occurrences >= count:
+                    break
+
+                occurrences += 1
+
+                if occ_start > window_end:
+                    break
+
+                if occ_end >= window_start and occ_start <= window_end:
+                    date_key = occ_start.strftime('%Y%m%d')
+                    if date_key not in exdates:
+                        occ = dict(ev)
+                        occ['dtstart'] = occ_start
+                        occ['dtend'] = occ_end
+                        occ.pop('rrule', None)
+                        occ.pop('exdates', None)
+                        result.append(occ)
+
+                cur_month += interval
+                if cur_month > 12:
+                    cur_year += (cur_month - 1) // 12
+                    cur_month = (cur_month - 1) % 12 + 1
+
+        elif freq in ('WEEKLY', 'DAILY'):
+            day_step = interval * 7 if freq == 'WEEKLY' else interval
+            delta = timedelta(days=day_step)
+
+            # Jump near window start
+            days_from_start = (window_start - dtstart).days
+            if days_from_start > day_step:
+                skip = (days_from_start - day_step) // day_step
+                occurrences = skip
+                cur = dtstart + timedelta(days=skip * day_step)
+            else:
+                cur = dtstart
+
+            for _ in range(400):  # Safety limit (> 1 year of daily)
+                occ_start = cur
+                occ_end = occ_start + duration
+
+                if until and occ_start > until:
+                    break
+                if count is not None and occurrences >= count:
+                    break
+
+                occurrences += 1
+
+                if occ_start > window_end:
+                    break
+
+                if occ_end >= window_start and occ_start <= window_end:
+                    date_key = occ_start.strftime('%Y%m%d')
+                    if date_key not in exdates:
+                        occ = dict(ev)
+                        occ['dtstart'] = occ_start
+                        occ['dtend'] = occ_end
+                        occ.pop('rrule', None)
+                        occ.pop('exdates', None)
+                        result.append(occ)
+
+                cur += delta
+
+    return result
 
 
 def calc_time_window(days):
@@ -272,6 +457,7 @@ for feed in feeds:
         continue
 
     events = parse_ics_events(ics_text)
+    events = expand_recurring(events, start, end)
     events = filter_events(events, start, end)
 
     # Per-feed event type filter
