@@ -930,28 +930,33 @@ private:
         display.setFullWindow();
         display.fillScreen(GxEPD_WHITE);
         display.setTextColor(GxEPD_BLACK);
-        display.setFont(NULL); // built-in 6x8 font
-        display.setCursor(0, 0);
+        display.setFont(&FreeSans9pt7b);
 
-        // Print line by line (built-in font is 8px tall)
-        int y = 4;
+        int16_t tx, ty;
+        uint16_t tw, th;
+        display.getTextBounds("Ay", 0, 0, &tx, &ty, &tw, &th);
+        int ascent = -(int)ty;
+        int lineH = (int)th + 3;
+
+        // Print line by line
+        int y = ascent + 2;
         int idx = 0;
         while (idx < (int)info.length() && y < 196) {
             int nl = info.indexOf('\n', idx);
             String line = (nl < 0) ? info.substring(idx) : info.substring(idx, nl);
             idx = (nl < 0) ? info.length() : nl + 1;
 
-            // Truncate long lines to fit 200px (33 chars at 6px)
-            if (line.length() > 33) line = line.substring(0, 33);
+            // Truncate long lines to fit 200px (~25 chars at 9pt)
+            if (line.length() > 25) line = line.substring(0, 25);
 
             display.setCursor(2, y);
             display.print(line);
-            y += 10;
+            y += lineH;
         }
 
         // Show version at bottom
-        display.setCursor(2, 190);
-        display.print("CrispFace v" CRISPFACE_VERSION " DBG");
+        display.setCursor(2, 194);
+        display.print("v" CRISPFACE_VERSION " DBG");
 
         display.display(true); // partial refresh
     }
