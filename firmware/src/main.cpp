@@ -315,6 +315,88 @@ public:
 
 private:
 
+    // ---- Word wrap helper ----
+
+    // Wraps text to fit within maxW pixels using the given font.
+    // Inserts '\n' at word boundaries. Existing '\n' are preserved.
+    void wordWrap(const char* text, char* out, int outSize, int maxW, const GFXfont* font) {
+        display.setFont(font);
+        int16_t tx, ty;
+        uint16_t tw, th;
+
+        int outIdx = 0;
+        int i = 0;
+        int len = strlen(text);
+
+        while (i < len && outIdx < outSize - 1) {
+            // Find end of this input line (up to next \n or end)
+            int lineEnd = i;
+            while (lineEnd < len && text[lineEnd] != '\n') lineEnd++;
+
+            // Word-wrap this segment
+            int segStart = i;
+            while (segStart < lineEnd && outIdx < outSize - 1) {
+                // Find how many chars fit within maxW
+                int lastSpace = -1;
+                int fitEnd = segStart;
+
+                // Measure incrementally word by word
+                for (int j = segStart; j <= lineEnd; j++) {
+                    if (j == lineEnd || text[j] == ' ') {
+                        // Measure segStart..j
+                        char tmp[64];
+                        int tmpLen = j - segStart;
+                        if (tmpLen >= (int)sizeof(tmp)) tmpLen = sizeof(tmp) - 1;
+                        memcpy(tmp, text + segStart, tmpLen);
+                        tmp[tmpLen] = '\0';
+                        display.getTextBounds(tmp, 0, 0, &tx, &ty, &tw, &th);
+                        if ((int)tw <= maxW) {
+                            fitEnd = j;
+                            if (text[j] == ' ') lastSpace = j;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                int copyEnd;
+                int nextStart;
+                if (fitEnd >= lineEnd) {
+                    // Whole remaining segment fits
+                    copyEnd = lineEnd;
+                    nextStart = lineEnd;
+                } else if (lastSpace > segStart) {
+                    // Break at last space that fit
+                    copyEnd = lastSpace;
+                    nextStart = lastSpace + 1; // skip the space
+                } else {
+                    // No space found — force break at fitEnd (or at least 1 char)
+                    copyEnd = fitEnd > segStart ? fitEnd : segStart + 1;
+                    nextStart = copyEnd;
+                }
+
+                int copyLen = copyEnd - segStart;
+                if (outIdx + copyLen >= outSize - 1) copyLen = outSize - 1 - outIdx;
+                memcpy(out + outIdx, text + segStart, copyLen);
+                outIdx += copyLen;
+
+                segStart = nextStart;
+                // Add newline if more text follows in this segment
+                if (segStart < lineEnd && outIdx < outSize - 1) {
+                    out[outIdx++] = '\n';
+                }
+            }
+
+            // Preserve original \n (move past it)
+            i = lineEnd;
+            if (i < len && text[i] == '\n') {
+                if (outIdx < outSize - 1) out[outIdx++] = '\n';
+                i++;
+            }
+        }
+        out[outIdx] = '\0';
+    }
+
     // ---- Notification rendering ----
 
     void renderNotification() {
@@ -347,9 +429,11 @@ private:
         // Horizontal separator line
         display.drawLine(20, 50, 180, 50, GxEPD_BLACK);
 
-        // Event text centered in middle area
+        // Event text centered in middle area (word-wrapped to fit)
         const GFXfont* bodyFont = &FreeSans12pt7b;
-        drawAligned(cfNotifText, 20, 60, 160, 80, "center", bodyFont, GxEPD_BLACK);
+        char wrapped[120];
+        wordWrap(cfNotifText, wrapped, sizeof(wrapped), 128, bodyFont);
+        drawAligned(wrapped, 20, 60, 160, 100, "center", bodyFont, GxEPD_BLACK);
 
         // "Press any button" hint near bottom
         display.setFont(&FreeSans9pt7b);
