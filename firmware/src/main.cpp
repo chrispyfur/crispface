@@ -489,8 +489,7 @@ private:
         f.close();
         if (err) return 0;
 
-        // WiFi stored as {"n":[...]} object wrapper
-        JsonArray arr = doc["n"].as<JsonArray>();
+        JsonArray arr = doc.as<JsonArray>();
         if (arr.isNull()) return 0;
 
         int count = 0;
@@ -820,7 +819,7 @@ private:
         syncProgress(50);
 
         {
-            DynamicJsonDocument doc(32768);
+            DynamicJsonDocument doc(16384);
             DeserializationError err = deserializeJson(doc, payload);
             int payloadLen = payload.length();
             payload = "";
@@ -852,14 +851,11 @@ private:
 
             // Save WiFi networks to SPIFFS (allows OTA WiFi updates)
             JsonArray wifiArr = doc["wifi"].as<JsonArray>();
-            if (!wifiArr.isNull() && wifiArr.size() > 0) {
+            int wifiApiCount = wifiArr.isNull() ? 0 : (int)wifiArr.size();
+            bool wifiWriteOk = false;
+            if (!wifiArr.isNull()) {
                 File wf = SPIFFS.open("/wifi.json", FILE_WRITE);
-                if (wf) {
-                    wf.print("{\"n\":");
-                    serializeJson(wifiArr, wf);
-                    wf.print("}");
-                    wf.close();
-                }
+                if (wf) { serializeJson(wifiArr, wf); wf.close(); wifiWriteOk = true; }
             }
 
             JsonArray faces = doc["faces"].as<JsonArray>();
@@ -992,7 +988,12 @@ private:
             dbg += " Interval: ";
             dbg += String(cfSyncInterval);
             dbg += "s\n";
-            // Show SPIFFS WiFi count
+            // WiFi diagnostics: API count, write result, SPIFFS read-back
+            dbg += "WiFi API: ";
+            dbg += String(wifiApiCount);
+            dbg += " Write: ";
+            dbg += wifiWriteOk ? "OK" : (wifiApiCount > 0 ? "FAIL" : "SKIP");
+            dbg += "\n";
             CfWifiNet tmpNets[5];
             int spiffsWifi = cfLoadWifiFromSPIFFS(tmpNets, 5);
             dbg += "SPIFFS WiFi: ";
