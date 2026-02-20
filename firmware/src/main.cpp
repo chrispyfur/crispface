@@ -21,6 +21,7 @@ RTC_DATA_ATTR bool cfFirstBoot    = true;  // true until first successful sync
 RTC_DATA_ATTR int  cfLastSyncTry  = 0;     // timestamp of last sync attempt (for backoff)
 RTC_DATA_ATTR bool cfFaceChanging = false; // skip sync when cycling faces
 RTC_DATA_ATTR int  cfSyncFails    = 0;     // consecutive sync failures (for progressive backoff)
+RTC_DATA_ATTR int  cfLastWifiIdx  = -1;    // last successful WiFi network index (skip scan on reconnect)
 
 // ---- Alert system ----
 struct CfAlert {
@@ -504,6 +505,7 @@ private:
             }
             if (WiFi.status() == WL_CONNECTED) {
                 if (debug) cfDebugWifi += "Connected OK\n";
+                cfLastWifiIdx = 0;
                 return true;
             }
             if (debug) {
@@ -511,12 +513,36 @@ private:
                 cfDebugWifi += String(attempts);
                 cfDebugWifi += " tries\n";
             }
+            cfLastWifiIdx = -1;
             WiFi.disconnect(true);
             WiFi.mode(WIFI_OFF);
             return false;
         }
 
-        // Multiple networks — scan and connect to strongest known one
+        // Multiple networks — try last successful network first (skip scan)
+        if (cfLastWifiIdx >= 0 && cfLastWifiIdx < netCount) {
+            if (debug) {
+                cfDebugWifi += "Quick: ";
+                cfDebugWifi += nets[cfLastWifiIdx].ssid;
+                cfDebugWifi += "\n";
+            }
+            WiFi.begin(nets[cfLastWifiIdx].ssid, nets[cfLastWifiIdx].pass);
+            int attempts = 0;
+            while (WiFi.status() != WL_CONNECTED && attempts < 10) {
+                delay(500);
+                attempts++;
+            }
+            if (WiFi.status() == WL_CONNECTED) {
+                if (debug) cfDebugWifi += "Quick OK\n";
+                return true;
+            }
+            if (debug) cfDebugWifi += "Quick FAIL\n";
+            WiFi.disconnect(true);
+            delay(100);
+            cfLastWifiIdx = -1;
+        }
+
+        // Full scan — either first boot or quick reconnect failed
         int found = WiFi.scanNetworks();
         if (debug) {
             cfDebugWifi += "Scan: ";
@@ -556,6 +582,7 @@ private:
                     }
                     if (WiFi.status() == WL_CONNECTED) {
                         if (debug) cfDebugWifi += "Connected OK\n";
+                        cfLastWifiIdx = k;
                         WiFi.scanDelete();
                         return true;
                     }
@@ -572,6 +599,7 @@ private:
             }
         }
 
+        cfLastWifiIdx = -1;
         WiFi.scanDelete();
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
@@ -581,7 +609,7 @@ private:
     // Sync RTC from NTP (call while WiFi is connected)
     void cfSyncNTP() {
         struct tm timeinfo;
-        if (getLocalTime(&timeinfo, 5000)) {
+        if (getLocalTime(&timeinfo, 3000)) {
             // Reject NTP results before build time (garbage/overflow)
             #if CRISPFACE_BUILD_EPOCH > 0
             time_t ntpEpoch = mktime(&timeinfo);
@@ -605,6 +633,8 @@ private:
 
     void syncFromServer(bool debug = false) {
         String dbg; // debug log, displayed when debug=true
+        unsigned long t0 = millis();
+        unsigned long tWifi = 0, tHttp = 0, tParse = 0;
         syncProgress(5);
 
         if (!cfConnectWiFi(debug)) {
@@ -612,6 +642,9 @@ private:
             if (debug) {
                 dbg += cfDebugWifi;
                 dbg += "RESULT: WiFi FAILED\n";
+                dbg += "WiFi: ";
+                dbg += String(millis() - t0);
+                dbg += "ms\n";
                 dbg += "Fails: ";
                 dbg += String(cfSyncFails);
                 dbg += " Backoff: ";
@@ -622,6 +655,7 @@ private:
             syncProgress(0);
             return;
         }
+        tWifi = millis();
 
         if (debug) {
             dbg += cfDebugWifi;
@@ -661,6 +695,7 @@ private:
         http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
         int httpCode = http.GET();
+        tHttp = millis();
         if (httpCode != 200) {
             http.end();
             cfSyncNTP();
@@ -671,6 +706,11 @@ private:
                 dbg += "HTTP: ";
                 dbg += String(httpCode);
                 dbg += " FAILED\n";
+                dbg += "WiFi: ";
+                dbg += String(tWifi - t0);
+                dbg += "ms HTTP: ";
+                dbg += String(tHttp - tWifi);
+                dbg += "ms\n";
                 dbg += "Fails: ";
                 dbg += String(cfSyncFails);
                 dbg += " Backoff: ";
@@ -751,10 +791,11 @@ private:
 
             syncProgress(60);
 
-            // Delete old face files
-            for (int i = 0; i < 10; i++) {
+            // Delete stale face files beyond new count (0..total-1 get overwritten)
+            for (int i = total; i < 10; i++) {
                 char path[24];
                 snprintf(path, sizeof(path), "/face_%d.json", i);
+                if (!SPIFFS.exists(path)) break; // no more old files
                 SPIFFS.remove(path);
             }
 
@@ -789,6 +830,8 @@ private:
                 count++;
                 syncProgress(60 + (30 * count / total));
             }
+
+            tParse = millis();
 
             cfFaceCount    = count;
             // If no server complications need refreshing, sync once a day
@@ -851,10 +894,11 @@ private:
         }
 
         if (debug) {
+            unsigned long tTotal = millis();
             dbg += "HTTP: 200 OK\n";
             dbg += "Faces: ";
             dbg += String(cfFaceCount);
-            dbg += "\nInterval: ";
+            dbg += " Interval: ";
             dbg += String(cfSyncInterval);
             dbg += "s\n";
             // Show SPIFFS WiFi count
@@ -862,11 +906,17 @@ private:
             int spiffsWifi = cfLoadWifiFromSPIFFS(tmpNets, 5);
             dbg += "SPIFFS WiFi: ";
             dbg += String(spiffsWifi);
-            dbg += "\nFails: ";
-            dbg += String(cfSyncFails);
-            dbg += " Backoff: ";
-            dbg += String(cfBackoffSeconds());
-            dbg += "s\n";
+            dbg += "\n--- Timing ---\n";
+            dbg += "WiFi: ";
+            dbg += String(tWifi - t0);
+            dbg += "ms HTTP: ";
+            dbg += String(tHttp - tWifi);
+            dbg += "ms\n";
+            dbg += "Parse: ";
+            dbg += String(tParse - tHttp);
+            dbg += "ms Total: ";
+            dbg += String(tTotal - t0);
+            dbg += "ms\n";
             renderDebug(dbg);
         }
 

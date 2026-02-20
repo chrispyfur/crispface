@@ -7,6 +7,7 @@ Returns resolved face JSON with server-side complication values pre-fetched
 and local complications (time, date, battery) flagged for on-device rendering.
 """
 import sys, os, json, time, urllib.parse, subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 from auth import get_user_from_bearer
@@ -122,7 +123,11 @@ if not face_ids:
 # ---- Load and resolve faces ----
 
 faces_dir = os.path.join(DATA_DIR, 'users', username, 'faces')
-faces = []
+
+# ---- First pass: load faces and collect sources to resolve ----
+
+loaded_faces = []
+resolve_tasks = []  # list of (face_idx, comp_idx, source, params)
 
 for face_id in face_ids:
     face_file = os.path.join(faces_dir, face_id + '.json')
@@ -135,27 +140,64 @@ for face_id in face_ids:
     if face.get('disabled', False):
         continue
 
-    resolved_complications = []
-    for comp in face.get('complications', []):
+    face_idx = len(loaded_faces)
+    loaded_faces.append(face)
+
+    for comp_idx, comp in enumerate(face.get('complications', [])):
         content = comp.get('content', {})
         comp_type = comp.get('complication_type', '')
         comp_id = comp.get('complication_id', '')
         is_local = comp_type in LOCAL_TYPES or comp_id in LOCAL_TYPES
-
-        # Resolve server-side complication values
-        value = content.get('value', '')
         source = content.get('source', '')
         params = comp.get('params', {})
 
-        source_alerts = []
         if source and not is_local:
-            resolved = resolve_source(source, params)
-            if resolved is not None:
-                if isinstance(resolved, dict):
-                    value = resolved.get('value', value)
-                    source_alerts = resolved.get('alerts', [])
-                else:
-                    value = resolved
+            resolve_tasks.append((face_idx, comp_idx, source, params))
+
+# ---- Resolve all server-side sources in parallel ----
+
+resolved_results = {}  # (face_idx, comp_idx) -> resolved data
+
+if resolve_tasks:
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {}
+        for face_idx, comp_idx, source, params in resolve_tasks:
+            future = executor.submit(resolve_source, source, params)
+            futures[future] = (face_idx, comp_idx)
+
+        for future in as_completed(futures, timeout=20):
+            key = futures[future]
+            try:
+                result = future.result()
+                if result is not None:
+                    resolved_results[key] = result
+            except Exception:
+                pass
+
+# ---- Second pass: build output faces with resolved values ----
+
+faces = []
+
+for face_idx, face in enumerate(loaded_faces):
+    resolved_complications = []
+    for comp_idx, comp in enumerate(face.get('complications', [])):
+        content = comp.get('content', {})
+        comp_type = comp.get('complication_type', '')
+        comp_id = comp.get('complication_id', '')
+        is_local = comp_type in LOCAL_TYPES or comp_id in LOCAL_TYPES
+        params = comp.get('params', {})
+
+        value = content.get('value', '')
+        source_alerts = []
+
+        # Merge parallel-resolved values
+        resolved = resolved_results.get((face_idx, comp_idx))
+        if resolved is not None:
+            if isinstance(resolved, dict):
+                value = resolved.get('value', value)
+                source_alerts = resolved.get('alerts', [])
+            else:
+                value = resolved
 
         # Map font family names
         family = content.get('family', 'sans-serif')
