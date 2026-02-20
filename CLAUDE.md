@@ -83,8 +83,9 @@ curl -H "Authorization: Bearer YOUR_API_TOKEN" \
 ### Firmware (v0.2.x)
 - **Single file**: `main.cpp` — CrispFace class extends Watchy
 - **RTC_DATA_ATTR** persists state across deep sleep: face index, face count, last sync time, sync interval, sync flag, last back-press time, time-seeded flag, plus alert/notification state (see Alert System below)
-- **SPIFFS** caches face JSON as `/face_0.json`, `/face_1.json`, etc. — no subdirectories (SPIFFS doesn't support real directories, crashes on directory operations)
-- **Sync flow**: WiFi connect → HTTPS GET with Bearer token → disconnect WiFi ASAP → parse JSON → write to SPIFFS
+- **SPIFFS** caches face JSON as `/face_0.json`, `/face_1.json`, etc., plus `/wifi.json` for OTA WiFi networks — no subdirectories (SPIFFS doesn't support real directories, crashes on directory operations)
+- **Sync flow**: WiFi connect → HTTPS GET with Bearer token → disconnect WiFi ASAP → parse JSON → write faces + WiFi to SPIFFS
+- **OTA WiFi**: API response includes `wifi` array; firmware writes to `/wifi.json` on SPIFFS. On connect, SPIFFS networks are tried first; compiled-in credentials are fallback for first flash only
 - **Progress bar**: 4px bar at bottom of display via `display.displayWindow()` partial update during sync — keeps existing face visible
 - **Local complications**: time, date, battery, version resolved on-device from RTC/ADC/config
 - **Server complications**: pre-resolved text values cached on SPIFFS
@@ -183,6 +184,10 @@ Calendar complications can include an `alerts` array in their API response. The 
       "local": true
     }]
   }],
+  "wifi": [
+    {"ssid": "HomeNetwork", "password": "secret123"},
+    {"ssid": "OfficeWiFi", "password": "work456"}
+  ],
   "fetched_at": 1707900000
 }
 ```

@@ -772,6 +772,7 @@
     // ---- Watch edit page ----
     var watchFaceIds = []; // current ordered face IDs for the watch being edited
     var watchWifiNetworks = []; // WiFi networks for this watch
+    var currentWatchId = null; // ID of the watch being edited
 
     var TIMEZONES = [
         'Europe/London', 'Europe/Dublin', 'Europe/Paris', 'Europe/Berlin',
@@ -812,6 +813,7 @@
                 window.location.href = BASE_URL + '/faces.html';
                 return;
             }
+            currentWatchId = watchId;
 
             // Bind buttons immediately (they exist in static HTML, not async)
             document.getElementById('btn-add-wifi').addEventListener('click', function () {
@@ -952,7 +954,7 @@
                     });
                 })(row);
 
-                // OK button — commit this row
+                // OK button — commit this row and auto-save
                 (function (idx) {
                     row.querySelector('.wifi-ok').addEventListener('click', function () {
                         collectWifiNetworks();
@@ -962,6 +964,7 @@
                         }
                         delete watchWifiNetworks[idx]._editing;
                         renderWifiNetworks();
+                        saveWifiNetworks(currentWatchId);
                     });
                 })(i);
             } else {
@@ -984,12 +987,14 @@
                 })(i);
             }
 
-            // Remove button (both states)
+            // Remove button (both states) — auto-save if network had an SSID
             (function (idx) {
                 row.querySelector('.var-remove').addEventListener('click', function () {
                     collectWifiNetworks();
+                    var hadSSID = watchWifiNetworks[idx] && watchWifiNetworks[idx].ssid;
                     watchWifiNetworks.splice(idx, 1);
                     renderWifiNetworks();
+                    if (hadSSID) saveWifiNetworks(currentWatchId);
                 });
             })(i);
 
@@ -1018,6 +1023,26 @@
             }
         }
         watchWifiNetworks = nets;
+    }
+
+    function saveWifiNetworks(watchId) {
+        if (!watchId) return;
+        // Strip transient _editing flag and empty entries
+        var cleanNets = [];
+        for (var i = 0; i < watchWifiNetworks.length; i++) {
+            var wn = watchWifiNetworks[i];
+            if (wn.ssid) cleanNets.push({ ssid: wn.ssid, password: wn.password });
+        }
+        var statusEl = document.getElementById('save-status');
+        api('POST', '/api/watch.py?id=' + watchId, { wifi_networks: cleanNets }).then(function (r) {
+            if (r.success) {
+                if (statusEl) {
+                    statusEl.textContent = 'WiFi saved';
+                    statusEl.style.color = '#43A047';
+                    setTimeout(function () { statusEl.textContent = ''; }, 2000);
+                }
+            }
+        });
     }
 
     function renderWatchFaces(allFaces, watchId) {

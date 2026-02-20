@@ -385,6 +385,42 @@ private:
         }
     }
 
+    // ---- WiFi network struct (for runtime network list) ----
+
+    struct CfWifiNet {
+        char ssid[33];
+        char pass[64];
+    };
+
+    // Load WiFi networks from /wifi.json on SPIFFS.
+    // Returns number of networks loaded into nets[] (0 on any error).
+    int cfLoadWifiFromSPIFFS(CfWifiNet* nets, int maxNets) {
+        File f = SPIFFS.open("/wifi.json", FILE_READ);
+        if (!f) return 0;
+
+        StaticJsonDocument<1024> doc;
+        DeserializationError err = deserializeJson(doc, f);
+        f.close();
+        if (err) return 0;
+
+        JsonArray arr = doc.as<JsonArray>();
+        if (arr.isNull()) return 0;
+
+        int count = 0;
+        for (JsonObject net : arr) {
+            if (count >= maxNets) break;
+            const char* s = net["ssid"] | "";
+            const char* p = net["password"] | "";
+            if (strlen(s) == 0) continue;
+            strncpy(nets[count].ssid, s, 32);
+            nets[count].ssid[32] = '\0';
+            strncpy(nets[count].pass, p, 63);
+            nets[count].pass[63] = '\0';
+            count++;
+        }
+        return count;
+    }
+
     // ---- Server sync ----
 
     void syncProgress(int percent) {
@@ -401,48 +437,46 @@ private:
     }
 
     bool cfConnectWiFi(bool debug = false) {
-        // Known networks from config (injected at build time)
-        const char* knownSSIDs[] = {
+        // Build runtime network list: try SPIFFS first, fall back to compiled-in
+        CfWifiNet nets[5];
+        int netCount = cfLoadWifiFromSPIFFS(nets, 5);
+        bool fromSPIFFS = (netCount > 0);
+
+        if (!fromSPIFFS) {
+            // Fall back to compile-time credentials (bootstrap for first flash)
 #if CRISPFACE_WIFI_COUNT >= 1
-            CRISPFACE_WIFI_SSID_0,
+            strncpy(nets[netCount].ssid, CRISPFACE_WIFI_SSID_0, 32); nets[netCount].ssid[32] = '\0';
+            strncpy(nets[netCount].pass, CRISPFACE_WIFI_PASS_0, 63); nets[netCount].pass[63] = '\0';
+            netCount++;
 #endif
 #if CRISPFACE_WIFI_COUNT >= 2
-            CRISPFACE_WIFI_SSID_1,
+            strncpy(nets[netCount].ssid, CRISPFACE_WIFI_SSID_1, 32); nets[netCount].ssid[32] = '\0';
+            strncpy(nets[netCount].pass, CRISPFACE_WIFI_PASS_1, 63); nets[netCount].pass[63] = '\0';
+            netCount++;
 #endif
 #if CRISPFACE_WIFI_COUNT >= 3
-            CRISPFACE_WIFI_SSID_2,
+            strncpy(nets[netCount].ssid, CRISPFACE_WIFI_SSID_2, 32); nets[netCount].ssid[32] = '\0';
+            strncpy(nets[netCount].pass, CRISPFACE_WIFI_PASS_2, 63); nets[netCount].pass[63] = '\0';
+            netCount++;
 #endif
 #if CRISPFACE_WIFI_COUNT >= 4
-            CRISPFACE_WIFI_SSID_3,
+            strncpy(nets[netCount].ssid, CRISPFACE_WIFI_SSID_3, 32); nets[netCount].ssid[32] = '\0';
+            strncpy(nets[netCount].pass, CRISPFACE_WIFI_PASS_3, 63); nets[netCount].pass[63] = '\0';
+            netCount++;
 #endif
 #if CRISPFACE_WIFI_COUNT >= 5
-            CRISPFACE_WIFI_SSID_4,
+            strncpy(nets[netCount].ssid, CRISPFACE_WIFI_SSID_4, 32); nets[netCount].ssid[32] = '\0';
+            strncpy(nets[netCount].pass, CRISPFACE_WIFI_PASS_4, 63); nets[netCount].pass[63] = '\0';
+            netCount++;
 #endif
-        };
-        const char* knownPasses[] = {
-#if CRISPFACE_WIFI_COUNT >= 1
-            CRISPFACE_WIFI_PASS_0,
-#endif
-#if CRISPFACE_WIFI_COUNT >= 2
-            CRISPFACE_WIFI_PASS_1,
-#endif
-#if CRISPFACE_WIFI_COUNT >= 3
-            CRISPFACE_WIFI_PASS_2,
-#endif
-#if CRISPFACE_WIFI_COUNT >= 4
-            CRISPFACE_WIFI_PASS_3,
-#endif
-#if CRISPFACE_WIFI_COUNT >= 5
-            CRISPFACE_WIFI_PASS_4,
-#endif
-        };
-        const int netCount = CRISPFACE_WIFI_COUNT;
+        }
+
         cfDebugWifi = "";
 
         if (debug) {
             cfDebugWifi += "WiFi: ";
             cfDebugWifi += String(netCount);
-            cfDebugWifi += " known\n";
+            cfDebugWifi += fromSPIFFS ? " (SPIFFS)\n" : " (built-in)\n";
         }
 
         WiFi.disconnect(true);
@@ -459,10 +493,10 @@ private:
             // Single network — connect directly without scanning
             if (debug) {
                 cfDebugWifi += "Try: ";
-                cfDebugWifi += knownSSIDs[0];
+                cfDebugWifi += nets[0].ssid;
                 cfDebugWifi += "\n";
             }
-            WiFi.begin(knownSSIDs[0], knownPasses[0]);
+            WiFi.begin(nets[0].ssid, nets[0].pass);
             int attempts = 0;
             while (WiFi.status() != WL_CONNECTED && attempts < 20) {
                 delay(500);
@@ -508,13 +542,13 @@ private:
                 cfDebugWifi += ")\n";
             }
             for (int k = 0; k < netCount; k++) {
-                if (scannedSSID == knownSSIDs[k]) {
+                if (scannedSSID == nets[k].ssid) {
                     if (debug) {
                         cfDebugWifi += "Try: ";
-                        cfDebugWifi += knownSSIDs[k];
+                        cfDebugWifi += nets[k].ssid;
                         cfDebugWifi += "\n";
                     }
-                    WiFi.begin(knownSSIDs[k], knownPasses[k]);
+                    WiFi.begin(nets[k].ssid, nets[k].pass);
                     int attempts = 0;
                     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
                         delay(500);
@@ -690,6 +724,13 @@ private:
                 return;
             }
 
+            // Save WiFi networks to SPIFFS (allows OTA WiFi updates)
+            JsonArray wifiArr = doc["wifi"].as<JsonArray>();
+            if (!wifiArr.isNull()) {
+                File wf = SPIFFS.open("/wifi.json", FILE_WRITE);
+                if (wf) { serializeJson(wifiArr, wf); wf.close(); }
+            }
+
             JsonArray faces = doc["faces"].as<JsonArray>();
             int total = faces.size();
             if (total == 0) {
@@ -815,7 +856,13 @@ private:
             dbg += String(cfFaceCount);
             dbg += "\nInterval: ";
             dbg += String(cfSyncInterval);
-            dbg += "s\nFails: ";
+            dbg += "s\n";
+            // Show SPIFFS WiFi count
+            CfWifiNet tmpNets[5];
+            int spiffsWifi = cfLoadWifiFromSPIFFS(tmpNets, 5);
+            dbg += "SPIFFS WiFi: ";
+            dbg += String(spiffsWifi);
+            dbg += "\nFails: ";
             dbg += String(cfSyncFails);
             dbg += " Backoff: ";
             dbg += String(cfBackoffSeconds());
