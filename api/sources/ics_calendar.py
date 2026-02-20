@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
 CACHE_DIR = os.path.join(DATA_DIR, 'cache')
-CACHE_MAX_AGE = 60
+CACHE_MAX_AGE = 10  # short TTL — just deduplicates same URL within a single sync request
 
 
 # Parse query parameters
