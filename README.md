@@ -2,7 +2,7 @@
 
 A custom watch face editor and firmware for the [Watchy](https://watchy.sqfmi.com/) ESP32-S3 e-paper smartwatch by [SQFMI](https://github.com/sqfmi/Watchy).
 
-Design watch faces in a browser, flash the firmware once over USB, and you're done — the watch syncs face layouts, complication data, and even WiFi credentials over the air. Edit a face, rearrange complications, add a new calendar feed, whatever — the watch picks up the changes on its next WiFi sync. No need to plug it in again.
+Design watch faces in a browser, flash the firmware once over USB, and you're done — the watch syncs face layouts, complication data, and even WiFi credentials over the air. Edit a face, rearrange complications, add a new calendar feed — the watch picks up the changes on its next WiFi sync. No need to plug it in again.
 
 ![Watchy running CrispFace](Documentation/watchy-crispface.jpg)
 
