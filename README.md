@@ -2,7 +2,9 @@
 
 Watch face editor for the [Watchy](https://watchy.sqfmi.com/) ESP32-S3 e-paper smartwatch.
 
-Design faces in a browser. Flash them to your watch. The watch syncs over WiFi and renders whatever you've built — weather, calendars, time, battery, static text, whatever. All the interesting logic runs on the server. The watch is a thin client.
+Design faces in a browser. Flash the firmware once over USB, and from then on the watch syncs everything over WiFi — face layouts, complications, data, even WiFi credentials. Change a face in the editor, and the watch picks it up on its next sync. No need to plug it in again.
+
+All the interesting logic runs on the server. The watch is a thin client.
 
 ## How It Works
 
