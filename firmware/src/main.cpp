@@ -129,6 +129,7 @@ public:
         // First boot / reboot: show boot screen before first sync
         if (cfFirstBoot) {
             renderBootScreen();
+            delay(1000); // let e-paper finish drawing before sync
             syncFromServer();
             cfNeedsSync = false;
             cfFirstBoot = false;
