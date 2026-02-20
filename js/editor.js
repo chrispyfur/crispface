@@ -978,20 +978,48 @@
                 cvs.height = 200;
                 card.appendChild(cvs);
 
+                // Bottom row: name + settings cog
+                var bottomDiv = document.createElement('div');
+                bottomDiv.className = 'face-card-bottom';
+
+                var cogBtn = document.createElement('button');
+                cogBtn.className = 'face-card-cog';
+                cogBtn.type = 'button';
+                cogBtn.title = 'Face Settings';
+                cogBtn.innerHTML = '&#9881;';
+                bottomDiv.appendChild(cogBtn);
+
                 var nameDiv = document.createElement('div');
                 nameDiv.className = 'face-card-name';
                 nameDiv.textContent = face.name || face.id;
-                card.appendChild(nameDiv);
+                bottomDiv.appendChild(nameDiv);
+
+                card.appendChild(bottomDiv);
 
                 listEl.appendChild(card);
 
                 // Click handler for switching
-                (function (faceId) {
-                    card.addEventListener('click', function () {
+                (function (faceId, cog) {
+                    card.addEventListener('click', function (e) {
+                        // If cog was clicked, don't switch — handle settings
+                        if (e.target === cog || cog.contains(e.target)) return;
                         if (faceId === CF.faceId) return;
                         switchToFace(faceId);
                     });
-                })(face.id);
+                    cog.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        // Switch to this face first if not active
+                        if (faceId !== CF.faceId) {
+                            switchToFace(faceId);
+                        }
+                        // Toggle settings panel
+                        var fsBody = document.getElementById('face-settings-body');
+                        if (fsBody) {
+                            var open = fsBody.style.display !== 'none';
+                            fsBody.style.display = open ? 'none' : '';
+                        }
+                    });
+                })(face.id, cogBtn);
             }
 
             // Render previews after fonts are ready
@@ -1275,6 +1303,7 @@
         }
 
         canvas.renderAll();
+        refreshCurrentCardPreview();
     }
 
     // ---- Live polling for complication sources ----
@@ -1725,20 +1754,12 @@
         loadComplicationTypes();
         loadFaceCards(faceId);
 
-        // Face settings cog toggle
-        var fsToggle = document.getElementById('face-settings-toggle');
+        // Close face settings panel when clicking outside
         var fsBody = document.getElementById('face-settings-body');
-        if (fsToggle && fsBody) {
-            fsToggle.addEventListener('click', function (e) {
-                e.stopPropagation();
-                var open = fsBody.style.display !== 'none';
-                fsBody.style.display = open ? 'none' : '';
-                fsToggle.classList.toggle('face-settings-open', !open);
-            });
+        if (fsBody) {
             document.addEventListener('click', function (e) {
-                if (fsBody.style.display !== 'none' && !fsBody.contains(e.target) && e.target !== fsToggle) {
+                if (fsBody.style.display !== 'none' && !fsBody.contains(e.target) && !e.target.classList.contains('face-card-cog')) {
                     fsBody.style.display = 'none';
-                    fsToggle.classList.remove('face-settings-open');
                 }
             });
         }
@@ -1754,7 +1775,6 @@
                     if (!resp.success) return;
                     // Close the settings panel
                     if (fsBody) fsBody.style.display = 'none';
-                    if (fsToggle) fsToggle.classList.remove('face-settings-open');
                     // Switch to another face or show empty state
                     if (watchId) {
                         CF.api('GET', '/api/watch.py?id=' + watchId).then(function (wr) {

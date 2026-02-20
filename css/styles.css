@@ -508,6 +508,7 @@ body.editor-page .main-content {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 .editor-canvas-area {
@@ -691,47 +692,45 @@ body:not(.simulating) .canvas-container-wrapper .canvas-container {
     font-size: 11px;
     font-weight: 500;
     color: var(--gray-dark);
-    padding: 2px 8px 6px;
-    text-align: center;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
+    min-width: 0;
 }
 
-/* Face settings cog + floating panel */
-.face-settings-anchor {
-    position: relative;
-    flex-shrink: 0;
+/* Face card bottom row (cog + name) */
+.face-card-bottom {
     display: flex;
-    justify-content: flex-end;
-    padding-top: 8px;
+    align-items: center;
+    padding: 2px 6px 6px;
+    gap: 4px;
 }
 
-.face-settings-cog {
+.face-card-cog {
     background: none;
-    border: 1px solid var(--gray-light);
-    border-radius: 4px;
-    width: 28px;
-    height: 28px;
-    font-size: 16px;
-    line-height: 28px;
-    text-align: center;
+    border: none;
+    font-size: 14px;
     padding: 0;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
     cursor: pointer;
-    color: var(--gray-medium);
-    transition: color 0.15s, border-color 0.15s;
+    color: var(--gray-light);
+    transition: color 0.15s;
+    flex-shrink: 0;
 }
 
-.face-settings-cog:hover,
-.face-settings-cog.face-settings-open {
+.face-card-cog:hover {
     color: var(--gray-dark);
-    border-color: var(--gray-dark);
 }
 
+/* Face settings floating panel */
 .face-settings-body {
     position: absolute;
-    bottom: 36px;
-    right: 0;
+    bottom: 8px;
+    left: 0;
     width: 210px;
     background: #fff;
     border: 1px solid var(--gray-light);
