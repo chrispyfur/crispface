@@ -4,7 +4,7 @@
     "description": "Current time display. On the actual watch, time is rendered locally; this endpoint exists for editor simulation.",
     "script": "time.py",
     "variables": [
-        {"name": "format", "label": "Format", "default": "HH:MM"}
+        {"name": "layout", "label": "Layout", "default": "horizontal", "type": "select", "options": ["horizontal", "vertical"]}
     ],
     "created_at": "2026-02-12T00:00:00+00:00",
     "updated_at": "2026-02-12T00:00:00+00:00"

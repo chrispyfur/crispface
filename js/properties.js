@@ -129,7 +129,7 @@
                         html += '<button type="button" class="prop-feed-add btn btn-sm btn-primary" id="prop-feed-add">+ Add Calendar</button>';
                         html += '</div></div>';
                     } else if (v.type === 'select' && v.options) {
-                        var opts = v.options.split(',');
+                        var opts = Array.isArray(v.options) ? v.options : v.options.split(',');
                         html += '<select id="prop-var-' + escHtml(v.name) + '" data-var-name="' + escHtml(v.name) + '" class="prop-var-input prop-var-select">';
                         for (var oi = 0; oi < opts.length; oi++) {
                             var optVal = opts[oi].trim();

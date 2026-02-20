@@ -6,20 +6,12 @@ import json, urllib.parse, os
 from datetime import datetime, timezone, timedelta
 
 qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
-fmt = qs.get('format', ['HH:MM'])[0]
+layout = qs.get('layout', ['horizontal'])[0]
 
 now = datetime.now(timezone(timedelta(hours=0)))  # UTC
 
-if fmt == 'HH:MM:SS':
-    value = now.strftime('%H:%M:%S')
-elif fmt == 'HH:MM':
-    value = now.strftime('%H:%M')
-elif fmt == '12h':
-    value = now.strftime('%I:%M %p')
-elif fmt == 'date':
-    value = now.strftime('%a %d %b')
-elif fmt == 'full':
-    value = now.strftime('%H:%M %a %d %b')
+if layout == 'vertical':
+    value = now.strftime('%H') + '\n' + now.strftime('%M')
 else:
     value = now.strftime('%H:%M')
 

@@ -1093,7 +1093,7 @@ private:
         // Resolve local values — check id first (type may be empty)
         String localVal;
         if (isLocal) {
-            localVal = resolveLocal(strlen(typ) > 0 ? typ : cid);
+            localVal = resolveLocal(strlen(typ) > 0 ? typ : cid, comp);
             val = localVal.c_str();
         }
 
@@ -1362,8 +1362,15 @@ private:
 
     // ---- Local complication values ----
 
-    String resolveLocal(const char* type) {
+    String resolveLocal(const char* type, JsonObject comp) {
         if (strcmp(type, "time") == 0) {
+            const char* layout = comp["params"]["layout"] | "horizontal";
+            if (strcmp(layout, "vertical") == 0) {
+                char buf[6];
+                snprintf(buf, sizeof(buf), "%02d\n%02d",
+                         currentTime.Hour, currentTime.Minute);
+                return String(buf);
+            }
             char buf[6];
             snprintf(buf, sizeof(buf), "%02d:%02d",
                      currentTime.Hour, currentTime.Minute);
