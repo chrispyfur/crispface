@@ -4,6 +4,8 @@ Watch face editor for the [Watchy](https://watchy.sqfmi.com/) ESP32-S3 e-paper s
 
 Design watch faces in a browser, flash the firmware once over USB, and you're done — the watch syncs face layouts, complication data, and even WiFi credentials over the air. Edit a face, rearrange complications, add a new calendar feed, whatever — the watch picks up the changes on its next WiFi sync. No need to plug it in again.
 
+![Watchy running CrispFace](Documentation/watchy-crispface.jpg)
+
 The server does all the heavy lifting. It resolves weather, calendar events, and other dynamic data before sending anything to the watch. The watch is a thin client — it renders what it's told and goes back to sleep.
 
 ## How It Works
@@ -121,6 +123,14 @@ After that first flash, all face design changes sync to the watch over WiFi auto
 - **Bottom-left**: stock Watchy menu (set time, buzzer, etc.)
 
 ## Documentation
+
+### Screenshots
+
+![Face list and watch preview](Documentation/face-list-preview.png)
+
+![Face editor with complication properties](Documentation/face-editor-properties.png)
+
+![Flash firmware page](Documentation/flash-firmware.png)
 
 - [Web Builder Spec](Documentation/crispface-web-builder-spec.md)
 - [Firmware Spec](Documentation/crispface-firmware-spec.md)
