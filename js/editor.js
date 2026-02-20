@@ -1891,21 +1891,8 @@
                 return;
             }
 
-            // No face ID — resolve from watch
-            var watches = CF.watches || [];
+            // No face ID — resolve from watch (use URL param or current watch)
             var watchId = watchParam || CF.currentWatchId;
-
-            if (watches.length > 1 && !watchParam) {
-                // Multiple watches, no explicit watch — show prompt
-                var canvasArea = document.querySelector('.editor-canvas-area');
-                if (canvasArea) {
-                    canvasArea.innerHTML =
-                        '<div class="editor-select-watch">' +
-                        '<p>Select a watch from the top left</p>' +
-                        '</div>';
-                }
-                return;
-            }
 
             if (watchId) {
                 resolveFirstFace(watchId);
