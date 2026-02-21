@@ -562,7 +562,7 @@ private:
         if (debug) {
             cfDebugWifi += "WiFi: ";
             cfDebugWifi += String(netCount);
-            cfDebugWifi += fromSPIFFS ? " (SPIFFS)\n" : " (built-in)\n";
+            cfDebugWifi += fromSPIFFS ? " (from API)\n" : " (built-in)\n";
         }
 
         WiFi.disconnect(true);
@@ -717,6 +717,10 @@ private:
     }
 
     void syncFromServer(bool debug = false) {
+        // Ensure SPIFFS is mounted (handleButtonPress may call us
+        // before drawWatchFace which normally mounts it)
+        SPIFFS.begin(true);
+
         String dbg; // debug log, displayed when debug=true
         unsigned long t0 = millis();
         unsigned long tWifi = 0, tHttp = 0, tParse = 0;
@@ -749,6 +753,7 @@ private:
             dbg += "\nRSSI: ";
             dbg += String(WiFi.RSSI());
             dbg += "dBm\n";
+            dbg += "\f"; // page break: WiFi on page 1, sync on page 2
         }
 
         // Start NTP in background (non-blocking) — runs while HTTP proceeds
@@ -987,20 +992,15 @@ private:
             dbg += "HTTP: 200 OK\n";
             dbg += "Faces: ";
             dbg += String(cfFaceCount);
-            dbg += " Interval: ";
+            dbg += " Sync: ";
             dbg += String(cfSyncInterval);
             dbg += "s\n";
-            // WiFi diagnostics: API count, write result, SPIFFS read-back
-            dbg += "WiFi API: ";
+            // WiFi OTA: networks from API, write to SPIFFS
+            dbg += "OTA WiFi: ";
             dbg += String(wifiApiCount);
             dbg += " Write: ";
-            dbg += wifiWriteOk ? "OK" : (wifiApiCount > 0 ? "FAIL" : "SKIP");
+            dbg += wifiWriteOk ? "OK" : (wifiApiCount > 0 ? "FAIL" : "N/A");
             dbg += "\n";
-            CfWifiNet tmpNets[5];
-            int spiffsWifi = cfLoadWifiFromSPIFFS(tmpNets, 5);
-            dbg += "SPIFFS WiFi: ";
-            dbg += String(spiffsWifi);
-            dbg += "\n--- Timing ---\n";
             dbg += "WiFi: ";
             dbg += String(tWifi - t0);
             dbg += "ms HTTP: ";
@@ -1026,24 +1026,47 @@ private:
         display.getTextBounds("Ay", 0, 0, &tx, &ty, &tw, &th);
         int ascent = -(int)ty;
         int lineH = (int)th + 3;
-
-        // Split into lines
-        const int maxLines = 40;
-        String lines[maxLines];
-        int lineCount = 0;
-        int idx = 0;
-        while (idx < (int)info.length() && lineCount < maxLines) {
-            int nl = info.indexOf('\n', idx);
-            String line = (nl < 0) ? info.substring(idx) : info.substring(idx, nl);
-            idx = (nl < 0) ? info.length() : nl + 1;
-            if (line.length() > 25) line = line.substring(0, 25);
-            lines[lineCount++] = line;
-        }
-
-        // Calculate lines per page (reserve bottom line for version/page)
         int linesPerPage = (194 - (ascent + 2)) / lineH;
-        int totalPages = (lineCount + linesPerPage - 1) / linesPerPage;
-        if (totalPages < 1) totalPages = 1;
+
+        // Split into explicit pages on '\f', then lines on '\n'
+        // Each '\f' forces a new page regardless of line count
+        const int maxPages = 8;
+        const int maxLinesPerPage = 12;
+        String pageLines[maxPages][maxLinesPerPage];
+        int pageLengths[maxPages] = {};
+        int totalPages = 0;
+
+        int idx = 0;
+        while (idx < (int)info.length() && totalPages < maxPages) {
+            int ff = info.indexOf('\f', idx);
+            String section = (ff < 0) ? info.substring(idx) : info.substring(idx, ff);
+            idx = (ff < 0) ? info.length() : ff + 1;
+
+            // Split section into lines
+            int si = 0;
+            while (si < (int)section.length()) {
+                int nl = section.indexOf('\n', si);
+                String line = (nl < 0) ? section.substring(si) : section.substring(si, nl);
+                si = (nl < 0) ? section.length() : nl + 1;
+                if (line.length() == 0 && si >= (int)section.length()) break;
+                if (line.length() > 25) line = line.substring(0, 25);
+
+                // Start new page if current is full
+                if (pageLengths[totalPages] >= linesPerPage) {
+                    totalPages++;
+                    if (totalPages >= maxPages) break;
+                }
+                pageLines[totalPages][pageLengths[totalPages]++] = line;
+            }
+            // Each '\f' forces next content onto a new page
+            if (ff >= 0 && totalPages < maxPages) {
+                totalPages++;
+            }
+        }
+        totalPages++; // convert from index to count
+        if (totalPages > maxPages) totalPages = maxPages;
+        // Remove trailing empty pages
+        while (totalPages > 1 && pageLengths[totalPages - 1] == 0) totalPages--;
 
         // Enable buttons for dismiss polling
         pinMode(UP_BTN_PIN, INPUT_PULLUP);
@@ -1054,19 +1077,15 @@ private:
         int page = 0;
         bool firstRender = true;
         while (true) {
-            int startLine = page * linesPerPage;
-            int endLine = startLine + linesPerPage;
-            if (endLine > lineCount) endLine = lineCount;
-
             display.setFullWindow();
             display.fillScreen(GxEPD_WHITE);
             display.setTextColor(GxEPD_BLACK);
             display.setFont(&FreeSans9pt7b);
 
             int y = ascent + 2;
-            for (int i = startLine; i < endLine; i++) {
+            for (int i = 0; i < pageLengths[page]; i++) {
                 display.setCursor(2, y);
-                display.print(lines[i]);
+                display.print(pageLines[page][i]);
                 y += lineH;
             }
 
