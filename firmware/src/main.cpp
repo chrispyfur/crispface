@@ -753,7 +753,6 @@ private:
             dbg += "\nRSSI: ";
             dbg += String(WiFi.RSSI());
             dbg += "dBm\n";
-            dbg += "\f"; // page break: WiFi on page 1, sync on page 2
         }
 
         // Start NTP in background (non-blocking) — runs while HTTP proceeds
@@ -768,12 +767,6 @@ private:
         char url[128];
         snprintf(url, sizeof(url), "%s%s?watch_id=%s",
                  CRISPFACE_SERVER, CRISPFACE_API_PATH, CRISPFACE_WATCH_ID);
-
-        if (debug) {
-            dbg += "URL: ";
-            dbg += url;
-            dbg += "\n";
-        }
 
         http.begin(client, url);
         char authHeader[80];
@@ -989,26 +982,33 @@ private:
 
         if (debug) {
             unsigned long tTotal = millis();
+            // Page 1 (WiFi) — append OTA count before page break
+            dbg += "OTA WiFi: ";
+            dbg += String(wifiApiCount);
+            dbg += " Write: ";
+            dbg += wifiWriteOk ? "OK" : (wifiApiCount > 0 ? "FAIL" : "N/A");
+            dbg += "\n";
+            dbg += "\f"; // page break: WiFi on page 1, sync on page 2
+            // Page 2 (Sync results + timing)
+            dbg += "URL: ";
+            dbg += url;
+            dbg += "\n";
             dbg += "HTTP: 200 OK\n";
             dbg += "Faces: ";
             dbg += String(cfFaceCount);
             dbg += " Sync: ";
             dbg += String(cfSyncInterval);
             dbg += "s\n";
-            // WiFi OTA: networks from API, write to SPIFFS
-            dbg += "OTA WiFi: ";
-            dbg += String(wifiApiCount);
-            dbg += " Write: ";
-            dbg += wifiWriteOk ? "OK" : (wifiApiCount > 0 ? "FAIL" : "N/A");
-            dbg += "\n";
             dbg += "WiFi: ";
             dbg += String(tWifi - t0);
-            dbg += "ms HTTP: ";
+            dbg += "ms\n";
+            dbg += "HTTP: ";
             dbg += String(tHttp - tWifi);
             dbg += "ms\n";
             dbg += "Parse: ";
             dbg += String(tParse - tHttp);
-            dbg += "ms Total: ";
+            dbg += "ms\n";
+            dbg += "Total: ";
             dbg += String(tTotal - t0);
             dbg += "ms\n";
             renderDebug(dbg);
