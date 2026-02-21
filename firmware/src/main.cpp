@@ -818,6 +818,8 @@ private:
 
         syncProgress(50);
 
+        int wifiApiCount = 0;
+        bool wifiWriteOk = false;
         {
             DynamicJsonDocument doc(16384);
             DeserializationError err = deserializeJson(doc, payload);
@@ -851,8 +853,8 @@ private:
 
             // Save WiFi networks to SPIFFS (allows OTA WiFi updates)
             JsonArray wifiArr = doc["wifi"].as<JsonArray>();
-            int wifiApiCount = wifiArr.isNull() ? 0 : (int)wifiArr.size();
-            bool wifiWriteOk = false;
+            wifiApiCount = wifiArr.isNull() ? 0 : (int)wifiArr.size();
+            wifiWriteOk = false;
             if (!wifiArr.isNull()) {
                 File wf = SPIFFS.open("/wifi.json", FILE_WRITE);
                 if (wf) { serializeJson(wifiArr, wf); wf.close(); wifiWriteOk = true; }
