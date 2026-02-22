@@ -1116,6 +1116,14 @@ body.simulating .canvas-container-wrapper {
     border-top: 1px solid var(--gray-light);
 }
 
+/* Variable hint text */
+.prop-hint {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    margin-top: 2px;
+}
+
 /* Town verification status */
 .prop-town-status {
     display: block;

@@ -135,7 +135,11 @@
                             var optVal = opts[oi].trim();
                             html += '<option value="' + escHtml(optVal) + '"' + (currentVal === optVal ? ' selected' : '') + '>' + escHtml(optVal.charAt(0).toUpperCase() + optVal.slice(1)) + '</option>';
                         }
-                        html += '</select></div>';
+                        html += '</select>';
+                        if (v.name === 'iconsize') {
+                            html += '<span class="prop-hint">Resolution, not size — resize with W/H above</span>';
+                        }
+                        html += '</div>';
                     } else if (v.type === 'stepper') {
                         var stepperId = 'prop-var-' + escHtml(v.name);
                         var stepVal = parseInt(currentVal, 10) || 0;
