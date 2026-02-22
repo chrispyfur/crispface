@@ -109,7 +109,7 @@
                             escHtml(v.label) + '</label></div>';
                         continue;
                     }
-                    html += '<div class="prop-row"><label for="prop-var-' + escHtml(v.name) + '">' + escHtml(v.label) + '</label>';
+                    html += '<div class="prop-row" data-var-row="' + escHtml(v.name) + '"><label for="prop-var-' + escHtml(v.name) + '">' + escHtml(v.label) + '</label>';
                     if (v.type === 'feeds') {
                         var feedsList = [];
                         try { feedsList = JSON.parse(currentVal || '[]'); } catch (e) { feedsList = []; }
@@ -423,7 +423,20 @@
                             if (inp.value.trim()) verify();
                         })(input);
                     }
+                    // Toggle iconsize visibility when display changes
+                    if (varName === 'display') {
+                        input.addEventListener('change', function () {
+                            var row = panel.querySelector('[data-var-row="iconsize"]');
+                            if (row) row.style.display = this.value === 'icon' ? '' : 'none';
+                        });
+                    }
                 })(varInputs[i]);
+            }
+            // Initial iconsize visibility — hide unless display is 'icon'
+            var iconsizeRow = panel.querySelector('[data-var-row="iconsize"]');
+            if (iconsizeRow) {
+                var displayVal = (currentObject.crispfaceData.params || {}).display || '';
+                if (displayVal !== 'icon') iconsizeRow.style.display = 'none';
             }
         } else if (!local) {
             // Params (key=value format)

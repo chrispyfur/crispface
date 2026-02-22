@@ -1669,6 +1669,30 @@
                 for (var i = 0; i < vars.length; i++) {
                     params[vars[i].name] = vars[i].default || '';
                 }
+                // Auto-populate uk-weather params from existing complications
+                if (typeId === 'uk-weather') {
+                    var existing = canvas.getObjects().filter(function (o) {
+                        return o.crispfaceData && o.crispfaceData.complication_type === 'uk-weather' && o.crispfaceData.params;
+                    });
+                    // Grab API key from first existing uk-weather complication
+                    for (var ei = 0; ei < existing.length; ei++) {
+                        var ek = existing[ei].crispfaceData.params.apikey;
+                        if (ek) { params.apikey = ek; break; }
+                    }
+                    // Use the most common town
+                    if (existing.length > 0) {
+                        var townCounts = {};
+                        for (var ei = 0; ei < existing.length; ei++) {
+                            var et = existing[ei].crispfaceData.params.town;
+                            if (et) townCounts[et] = (townCounts[et] || 0) + 1;
+                        }
+                        var bestTown = '', bestCount = 0;
+                        for (var t in townCounts) {
+                            if (townCounts[t] > bestCount) { bestTown = t; bestCount = townCounts[t]; }
+                        }
+                        if (bestTown) params.town = bestTown;
+                    }
+                }
             }
 
             var newObj = createTextComplication({
