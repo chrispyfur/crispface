@@ -78,6 +78,20 @@
         'serif': 'CrispSerif'
     };
 
+    // Explicitly load all watch fonts — document.fonts.ready alone isn't enough
+    // because canvas 2D ctx.font doesn't trigger font loading from @font-face.
+    var fontsLoaded = (function () {
+        if (!document.fonts || !document.fonts.load) return Promise.resolve();
+        return Promise.all([
+            document.fonts.load('16px CrispSans'),
+            document.fonts.load('bold 16px CrispSans'),
+            document.fonts.load('16px CrispMono'),
+            document.fonts.load('bold 16px CrispMono'),
+            document.fonts.load('16px CrispSerif'),
+            document.fonts.load('bold 16px CrispSerif')
+        ]);
+    })();
+
     // Compute text inset from border + padding (0 when no border)
     function getInset(d) {
         var bw = d.border_width || 0;
@@ -730,9 +744,7 @@
         window.CRISPFACE.canvas = canvas;
 
         // Re-render once web fonts are loaded (first render may use fallback)
-        if (document.fonts && document.fonts.ready) {
-            document.fonts.ready.then(function () { canvas.renderAll(); });
-        }
+        fontsLoaded.then(function () { canvas.renderAll(); });
 
         // Start live polling for complications with sources
         startLivePolling();
@@ -1022,8 +1034,8 @@
                 })(face.id, cogBtn);
             }
 
-            // Render previews after fonts are ready
-            document.fonts.ready.then(function () {
+            // Render previews after fonts are loaded
+            fontsLoaded.then(function () {
                 var cards = listEl.querySelectorAll('.face-card');
                 for (var i = 0; i < cards.length; i++) {
                     var faceId = cards[i].getAttribute('data-face-id');
