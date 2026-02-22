@@ -172,6 +172,7 @@
             }
 
             // Font family + size
+            html += '<div id="prop-text-style-section">';
             html += '<div class="prop-section-label">Text Style</div>';
             html += '<div class="prop-row-inline">';
             html += '<div class="prop-row"><label for="prop-family">Font</label>';
@@ -196,6 +197,7 @@
             html += '<button type="button" class="prop-snap-btn prop-align-btn' + (curAlign === 'center' ? ' active' : '') + '" data-align="center">Centre</button>';
             html += '<button type="button" class="prop-snap-btn prop-align-btn' + (curAlign === 'right' ? ' active' : '') + '" data-align="right">Right</button>';
             html += '</div></div>';
+            html += '</div>'; // end prop-text-style-section
         }
 
         // Border (all complications)
@@ -423,21 +425,24 @@
                             if (inp.value.trim()) verify();
                         })(input);
                     }
-                    // Toggle iconsize visibility when display changes
+                    // Toggle icon-specific UI when display changes
                     if (varName === 'display') {
                         input.addEventListener('change', function () {
+                            var isIcon = this.value === 'icon';
                             var row = panel.querySelector('[data-var-row="iconsize"]');
-                            if (row) row.style.display = this.value === 'icon' ? '' : 'none';
+                            if (row) row.style.display = isIcon ? '' : 'none';
+                            var textSection = document.getElementById('prop-text-style-section');
+                            if (textSection) textSection.style.display = isIcon ? 'none' : '';
                         });
                     }
                 })(varInputs[i]);
             }
-            // Initial iconsize visibility — hide unless display is 'icon'
+            // Initial visibility — iconsize only for icon, text styles only for non-icon
             var iconsizeRow = panel.querySelector('[data-var-row="iconsize"]');
-            if (iconsizeRow) {
-                var displayVal = (currentObject.crispfaceData.params || {}).display || '';
-                if (displayVal !== 'icon') iconsizeRow.style.display = 'none';
-            }
+            var textSection = document.getElementById('prop-text-style-section');
+            var displayVal = (currentObject.crispfaceData.params || {}).display || '';
+            if (iconsizeRow && displayVal !== 'icon') iconsizeRow.style.display = 'none';
+            if (textSection && displayVal === 'icon') textSection.style.display = 'none';
         } else if (!local) {
             // Params (key=value format)
             bindInput('prop-params', function (val) {
