@@ -909,6 +909,17 @@
                 items.push({ name: name, freq: 'local' });
             } else if (!c.content || !c.content.source || cType === 'text') {
                 items.push({ name: name, freq: 'static' });
+            } else if (cType === 'ics-calendar' && c.params && c.params.feeds) {
+                // Show individual feed refresh intervals
+                var feeds = [];
+                try { feeds = JSON.parse(c.params.feeds); } catch (e) {}
+                if (feeds.length === 0) {
+                    items.push({ name: name, freq: 'no feeds' });
+                } else {
+                    for (var fi = 0; fi < feeds.length; fi++) {
+                        items.push({ name: feeds[fi].name || 'Calendar', freq: formatInterval(feeds[fi].refresh || 30) });
+                    }
+                }
             } else {
                 items.push({ name: name, freq: formatInterval(c.refresh_interval || 30) });
             }
