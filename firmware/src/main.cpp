@@ -129,7 +129,6 @@ public:
         // First boot / reboot: show boot screen before first sync
         if (cfFirstBoot) {
             renderBootScreen();
-            delay(1000); // let e-paper finish drawing before sync
             syncFromServer();
             cfNeedsSync = false;
             cfFirstBoot = false;
@@ -1841,7 +1840,7 @@ private:
         display.setCursor((200 - (int)tw) / 2, 170);
         display.print(l1);
 
-        display.display(true); // partial refresh to show immediately
+        display.display(false); // full refresh — blocks until e-paper fully settled
     }
 
     // ---- Fallback screen (no faces after sync) ----
