@@ -1254,13 +1254,38 @@ private:
         }
     }
 
+    // ---- Battery helpers ----
+
+    // LiPo discharge curve lookup — voltage to percentage
+    // Tuned for Watchy ESP32-S3 ADC readings via voltage divider
+    int batteryPercent(float v) {
+        // Piecewise linear interpolation of typical LiPo discharge curve
+        // Points: (voltage, percent)
+        static const float vTable[] = { 3.20, 3.40, 3.50, 3.60, 3.70, 3.75, 3.80, 3.85, 3.90, 3.95, 4.05, 4.15, 4.20 };
+        static const int   pTable[] = {    0,    2,    5,   10,   20,   30,   40,   50,   60,   70,   85,   95,  100 };
+        static const int N = sizeof(vTable) / sizeof(vTable[0]);
+        if (v <= vTable[0]) return 0;
+        if (v >= vTable[N - 1]) return 100;
+        for (int i = 1; i < N; i++) {
+            if (v <= vTable[i]) {
+                float frac = (v - vTable[i - 1]) / (vTable[i] - vTable[i - 1]);
+                return pTable[i - 1] + (int)(frac * (pTable[i] - pTable[i - 1]));
+            }
+        }
+        return 100;
+    }
+
+    bool isCharging() {
+        pinMode(USB_DET_PIN, INPUT);
+        return digitalRead(USB_DET_PIN) == HIGH;
+    }
+
     // ---- Battery icon ----
 
     void drawBatteryIcon(int x, int y, int w, int h, uint16_t color) {
         float v = getBatteryVoltage();
-        int pct = (int)((v - 3.3f) / (4.2f - 3.3f) * 100.0f);
-        if (pct < 0) pct = 0;
-        if (pct > 100) pct = 100;
+        int pct = batteryPercent(v);
+        bool charging = isCharging();
 
         // Body dimensions (leave room for nub on right)
         int nubW = 2;
@@ -1284,20 +1309,47 @@ private:
         if (fillW > 0) {
             display.fillRect(x + pad, y + pad, fillW, h - pad * 2, color);
         }
+
+        // Charging: draw lightning bolt centered in body
+        if (charging) {
+            int cx = x + bodyW / 2;
+            int cy = y + h / 2;
+            int bh = h - pad * 2 - 2; // bolt height, inset from body
+            if (bh < 6) bh = 6;
+            int bw = bh * 2 / 5;      // bolt width proportional to height
+            if (bw < 3) bw = 3;
+            int top = cy - bh / 2;
+            // Invert color over the fill for contrast
+            uint16_t boltColor = (pct > 40) ? (color == GxEPD_BLACK ? GxEPD_WHITE : GxEPD_BLACK) : color;
+            // Simple bolt: top-right to center-left, then center-right to bottom-left
+            display.drawLine(cx + bw / 2, top, cx - bw / 2, cy, boltColor);
+            display.drawLine(cx - bw / 2, cy, cx + bw / 2, cy, boltColor);
+            display.drawLine(cx + bw / 2, cy, cx - bw / 2, top + bh, boltColor);
+            // Thicken by drawing offset lines
+            display.drawLine(cx + bw / 2 + 1, top, cx - bw / 2 + 1, cy, boltColor);
+            display.drawLine(cx + bw / 2 + 1, cy, cx - bw / 2 + 1, top + bh, boltColor);
+        }
     }
 
     // ---- Battery text (percentage or voltage) ----
 
     String resolveBattery(const char* mode) {
         float v = getBatteryVoltage();
-        char buf[8];
+        char buf[12];
+        bool charging = isCharging();
         if (strcmp(mode, "percentage") == 0) {
-            int pct = (int)((v - 3.3f) / (4.2f - 3.3f) * 100.0f);
-            if (pct < 0) pct = 0;
-            if (pct > 100) pct = 100;
-            snprintf(buf, sizeof(buf), "%d%%", pct);
+            int pct = batteryPercent(v);
+            if (charging) {
+                snprintf(buf, sizeof(buf), "%d%% +", pct);
+            } else {
+                snprintf(buf, sizeof(buf), "%d%%", pct);
+            }
         } else {
-            snprintf(buf, sizeof(buf), "%.1fV", v);
+            if (charging) {
+                snprintf(buf, sizeof(buf), "%.1fV +", v);
+            } else {
+                snprintf(buf, sizeof(buf), "%.1fV", v);
+            }
         }
         return String(buf);
     }

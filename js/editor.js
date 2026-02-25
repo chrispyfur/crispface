@@ -109,6 +109,23 @@
     window.CRISPFACE.ALIGNS = ALIGNS;
     window.CRISPFACE.getInset = getInset;
 
+    // Draw charging lightning bolt on a canvas 2D context
+    function drawChargingBolt(ctx, x, y, bodyW, h, col, bg) {
+        var cx = x + bodyW / 2;
+        var cy = y + h / 2;
+        var bh = h - 6; if (bh < 6) bh = 6;
+        var bw = Math.floor(bh * 2 / 5); if (bw < 3) bw = 3;
+        var top = cy - bh / 2;
+        ctx.strokeStyle = bg;  // contrast over fill
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + bw / 2, top);
+        ctx.lineTo(cx - bw / 2, cy);
+        ctx.lineTo(cx + bw / 2, cy);
+        ctx.lineTo(cx - bw / 2, top + bh);
+        ctx.stroke();
+    }
+
     // Migrate old combined font spec (e.g. "sans-12") to separate fields
     function migrateContent(content) {
         if (content.font && !content.family) {
@@ -206,6 +223,8 @@
                 var maxFillW = bodyW - bPad * 2;
                 var fillW = Math.floor(maxFillW * 0.65);
                 if (fillW > 0) ctx.fillRect(ix + bPad, iy + bPad, fillW, ih - bPad * 2);
+                // Show charging bolt in preview
+                drawChargingBolt(ctx, ix, iy, bodyW, ih, col, bg);
                 ctx.restore();
                 continue;
             }
@@ -611,6 +630,9 @@
                     if (fillW > 0) {
                         ctx.fillRect(ix + pad, iy + pad, fillW, ih - pad * 2);
                     }
+
+                    // Show charging bolt in preview
+                    drawChargingBolt(ctx, ix, iy, bodyW, ih, col, bg);
 
                     ctx.restore();
                 } else if (d.type === 'text' && d.content && String(d.content.value || '').indexOf('icon:') === 0) {
