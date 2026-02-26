@@ -1258,12 +1258,12 @@ private:
     // LiPo discharge curve lookup — voltage to percentage
     // The Watchy V3 360K/100K divider puts full-charge (4.2V) at 3.29V on
     // the ADC pin — above the ESP32-S3's ~3.1V accurate range at 11dB
-    // attenuation.  Reported voltage tops out around 3.95V, so the curve
-    // maps that to 100%.
+    // attenuation.  Reported voltage caps at ~3.90V, so the curve maps
+    // that to 100%.
     int batteryPercent(float v) {
-        // Piecewise linear interpolation; capped at ADC ceiling (~3.95V)
-        static const float vTable[] = { 3.20, 3.40, 3.50, 3.60, 3.70, 3.75, 3.80, 3.85, 3.90, 3.95 };
-        static const int   pTable[] = {    0,    3,    8,   15,   30,   42,   55,   70,   85,  100 };
+        // Piecewise linear interpolation; capped at ADC ceiling (~3.90V)
+        static const float vTable[] = { 3.20, 3.40, 3.50, 3.60, 3.65, 3.70, 3.75, 3.80, 3.85, 3.90 };
+        static const int   pTable[] = {    0,    3,    5,   10,   20,   35,   50,   70,   88,  100 };
         static const int N = sizeof(vTable) / sizeof(vTable[0]);
         if (v <= vTable[0]) return 0;
         if (v >= vTable[N - 1]) return 100;
