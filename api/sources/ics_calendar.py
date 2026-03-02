@@ -116,6 +116,10 @@ def parse_ics_events(ics_text):
                 event['description'] = value.replace('\\n', '\n').replace('\\,', ',')
             elif prop_name == 'TRANSP':
                 event['transp'] = value.strip().upper()
+            elif prop_name == 'UID':
+                event['uid'] = value.strip()
+            elif prop_name == 'RECURRENCE-ID':
+                event['recurrence_id'] = parse_ics_datetime(value)
             elif prop_name == 'RRULE':
                 event['rrule'] = value
             elif prop_name == 'EXDATE':
@@ -140,7 +144,18 @@ def parse_rrule(rrule_str):
 
 
 def expand_recurring(events, window_start, window_end):
-    """Expand recurring events (RRULE) into concrete occurrences within the window."""
+    """Expand recurring events (RRULE) into concrete occurrences within the window.
+    Handles RECURRENCE-ID: modified instances replace the original occurrence."""
+    # Collect exception dates per UID from events with RECURRENCE-ID
+    # These are modified instances that override a specific recurring occurrence
+    exception_dates = {}  # uid -> set of YYYYMMDD strings
+    for ev in events:
+        if 'recurrence_id' in ev and 'uid' in ev:
+            uid = ev['uid']
+            if uid not in exception_dates:
+                exception_dates[uid] = set()
+            exception_dates[uid].add(ev['recurrence_id'].strftime('%Y%m%d'))
+
     result = []
     for ev in events:
         if 'rrule' not in ev:
@@ -169,7 +184,11 @@ def expand_recurring(events, window_start, window_end):
         # COUNT limit
         count = int(rule['COUNT']) if 'COUNT' in rule else None
 
-        exdates = ev.get('exdates', set())
+        exdates = set(ev.get('exdates', set()))
+        # Also exclude dates overridden by RECURRENCE-ID exceptions
+        uid = ev.get('uid', '')
+        if uid and uid in exception_dates:
+            exdates |= exception_dates[uid]
 
         # Generate occurrences — jump near window to avoid iterating from distant past
         occurrences = 0  # Total from original dtstart (for COUNT)
