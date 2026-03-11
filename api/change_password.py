@@ -27,10 +27,10 @@ if not current_password:
     print(json.dumps({'success': False, 'error': 'Current password is required'}))
     sys.exit(0)
 
-if not new_password or len(new_password) < 4:
+if not new_password or len(new_password) < 8:
     print('Content-Type: application/json')
     print()
-    print(json.dumps({'success': False, 'error': 'New password must be at least 4 characters'}))
+    print(json.dumps({'success': False, 'error': 'New password must be at least 8 characters'}))
     sys.exit(0)
 
 users = load_users()

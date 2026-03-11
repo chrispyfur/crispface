@@ -165,21 +165,21 @@ The `Deny from all` directive in `data/.htaccess` only works if the Apache virtu
 
 | # | Severity | Component | Issue | Status |
 |---|----------|-----------|-------|--------|
-| 1 | Critical | `lib/`, `firmware/` | Directories web-accessible (secrets exposed) | Open |
-| 2 | Critical | `build_firmware.php` | No authentication on build endpoint | Open |
-| 3 | Critical | `watch_faces.py` | Path traversal via `source` field | Open |
-| 4 | Critical | `watch_faces.py` | Path traversal via `watch_id` | Open |
-| 5 | Critical | `ics_calendar.py` | SSRF via user-controlled ICS URLs | Open |
-| 6 | High | `lib/auth.py` | Auth cookie missing `Secure` flag | Open |
-| 7 | High | `js/app.js` | `innerHTML` XSS in `setStatus()` | Open |
-| 8 | High | `router.php` | Python stderr leaked to client | Open |
+| 1 | Critical | `lib/`, `firmware/` | Directories web-accessible (secrets exposed) | **Fixed** |
+| 2 | Critical | `build_firmware.php` | No authentication on build endpoint | **Fixed** |
+| 3 | Critical | `watch_faces.py` | Path traversal via `source` field | **Fixed** |
+| 4 | Critical | `watch_faces.py` | Path traversal via `watch_id` | **Fixed** |
+| 5 | Critical | `ics_calendar.py` | SSRF via user-controlled ICS URLs | **Fixed** |
+| 6 | High | `lib/auth.py` | Auth cookie missing `Secure` flag | **Fixed** |
+| 7 | High | `js/app.js` | `innerHTML` XSS in `setStatus()` | **Fixed** |
+| 8 | High | `router.php` | Python stderr leaked to client | **Fixed** |
 | 9 | Medium | `api/login.py` | No login rate limiting | Open |
-| 10 | Medium | Multiple files | Minimum 4-character password | Open |
+| 10 | Medium | Multiple files | Minimum 4-character password | **Fixed** (now 8) |
 | 11 | Medium | `build_firmware.php` | Build race condition | Open |
 | 12 | Medium | All API endpoints | No CSRF tokens (SameSite only) | Accepted |
-| 13 | Low | Root `.htaccess` | No security response headers | Open |
+| 13 | Low | Root `.htaccess` | No security response headers | **Fixed** |
 | 14 | Info | `lib/config.py` | `exec()` for secrets loading | Accepted |
 | 15 | Info | `data/.htaccess` | Depends on `AllowOverride` | Accepted |
-| 16 | Info | `sample_word.py` | Unnecessary CORS header | Open |
+| 16 | Info | `sample_word.py` | Unnecessary CORS header | **Fixed** |
 
-**Recommendation**: Findings 1-5 should be fixed before exposing this to untrusted users. For personal/trusted-group deployments behind a firewall, the risk is manageable. Findings 6-8 are straightforward hardening that should be applied. Findings 9-11 are nice-to-have improvements.
+**Remaining open items**: Login rate limiting (#9) and build race condition (#11). Rate limiting is best handled at the Apache level (`mod_evasive`). The build race condition requires `flock()` around the config.h modification — low risk in practice since builds are infrequent and manual.

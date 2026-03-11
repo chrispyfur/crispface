@@ -6,7 +6,7 @@ Auth: Authorization: Bearer <token>
 Returns resolved face JSON with server-side complication values pre-fetched
 and local complications (time, date, battery) flagged for on-device rendering.
 """
-import sys, os, json, time, urllib.parse, subprocess
+import sys, os, json, time, re, urllib.parse, subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
@@ -46,7 +46,11 @@ def resolve_source(source, params):
         source_path, existing_qs = source, ''
 
     rel_path = source_path[len(prefix):]
-    script_path = os.path.join(API_DIR, rel_path)
+    script_path = os.path.realpath(os.path.join(API_DIR, rel_path))
+
+    # Prevent path traversal — script must be inside the API directory
+    if not script_path.startswith(os.path.realpath(API_DIR) + os.sep):
+        return None
 
     if not os.path.exists(script_path):
         return None
@@ -102,7 +106,7 @@ if not username:
 # ---- Parse query ----
 
 qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
-watch_id = qs.get('watch_id', [''])[0].strip()
+watch_id = re.sub(r'[^a-f0-9]', '', qs.get('watch_id', [''])[0].strip())
 if not watch_id:
     error('Missing watch_id parameter')
 

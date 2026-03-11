@@ -417,6 +417,11 @@ def format_events(events, detail, max_chars, dividers=True):
 
 def fetch_ics(url):
     """Fetch ICS text from URL. Caches last successful fetch as fallback."""
+    # Validate URL scheme to prevent SSRF (file://, internal services, etc.)
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        return None
+
     url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
     cache_file = os.path.join(CACHE_DIR, 'ical_{}.json'.format(url_hash))
 

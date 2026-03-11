@@ -94,9 +94,12 @@ fclose($pipes[2]);
 $exitCode = proc_close($process);
 
 if ($exitCode !== 0 && $output === '') {
+    if ($stderr) {
+        error_log('CrispFace script error (' . $scriptName . '): ' . $stderr);
+    }
     http_response_code(500);
     header('Content-Type: application/json');
-    echo json_encode(['success' => false, 'error' => 'Script error', 'detail' => $stderr]);
+    echo json_encode(['success' => false, 'error' => 'Internal server error']);
     exit;
 }
 

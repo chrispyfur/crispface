@@ -9,6 +9,35 @@
 header('Content-Type: application/json');
 header('Cache-Control: no-store');
 
+// ---- Auth: verify session cookie (same HMAC scheme as Python endpoints) ----
+$authUser = null;
+$cookieName = 'crispface_auth';
+$secretsPath = realpath(__DIR__ . '/../lib/secrets.py');
+$secretKey = null;
+if ($secretsPath && file_exists($secretsPath)) {
+    $secretsContent = file_get_contents($secretsPath);
+    if (preg_match("/SECRET_KEY\s*=\s*['\"]([^'\"]+)['\"]/", $secretsContent, $skm)) {
+        $secretKey = $skm[1];
+    }
+}
+if ($secretKey && isset($_COOKIE[$cookieName])) {
+    $parts = explode('.', $_COOKIE[$cookieName], 2);
+    if (count($parts) === 2) {
+        $expectedSig = hash_hmac('sha256', $parts[0], $secretKey);
+        if (hash_equals($expectedSig, $parts[1])) {
+            $payload = json_decode(base64_decode($parts[0]), true);
+            if ($payload && ($payload['exp'] ?? 0) > time()) {
+                $authUser = $payload['user'] ?? null;
+            }
+        }
+    }
+}
+if (!$authUser) {
+    http_response_code(401);
+    echo json_encode(['success' => false, 'error' => 'Not authenticated']);
+    exit;
+}
+
 $env = $_GET['env'] ?? 'watchy';
 if (!in_array($env, ['watchy', 'stock'], true)) {
     http_response_code(400);
@@ -49,19 +78,13 @@ if ($watchId && $env === 'watchy') {
     $safeId = preg_replace('/[^a-f0-9]/', '', $watchId);
     $watch = null;
 
-    // Search for the watch file across all users
+    // Search for the watch in the authenticated user's directory only
     if ($safeId && $dataDir) {
-        $usersDir = $dataDir . '/users';
-        if (is_dir($usersDir)) {
-            foreach (scandir($usersDir) as $userDir) {
-                if ($userDir === '.' || $userDir === '..') continue;
-                $watchFile = $usersDir . '/' . $userDir . '/watches/' . $safeId . '.json';
-                if (file_exists($watchFile)) {
-                    $watch = json_decode(file_get_contents($watchFile), true);
-                    $watchOwner = $userDir;
-                    break;
-                }
-            }
+        $safeUser = preg_replace('/[^a-zA-Z0-9_-]/', '', $authUser);
+        $watchFile = $dataDir . '/users/' . $safeUser . '/watches/' . $safeId . '.json';
+        if (file_exists($watchFile)) {
+            $watch = json_decode(file_get_contents($watchFile), true);
+            $watchOwner = $safeUser;
         }
     }
 
@@ -165,10 +188,10 @@ file_put_contents($configPath, $persistentConfig);
 
 if ($exitCode !== 0) {
     http_response_code(500);
+    error_log('CrispFace build failed: ' . $buildOutput);
     echo json_encode([
         'success' => false,
-        'error' => 'Build failed',
-        'output' => $buildOutput
+        'error' => 'Build failed'
     ]);
     exit;
 }
@@ -199,10 +222,10 @@ $mergeOutput = implode("\n", $mergeLines);
 
 if ($mergeExit !== 0 || !file_exists($binPath)) {
     http_response_code(500);
+    error_log('CrispFace merge failed: ' . $mergeOutput);
     echo json_encode([
         'success' => false,
-        'error' => 'Merge failed',
-        'output' => $mergeOutput
+        'error' => 'Merge failed'
     ]);
     exit;
 }

@@ -46,10 +46,10 @@ elif method == 'POST':
         print(json.dumps({'success': False, 'error': 'Username must be lowercase alphanumeric, hyphens, or underscores'}))
         sys.exit(0)
 
-    if not password or len(password) < 4:
+    if not password or len(password) < 8:
         print('Content-Type: application/json')
         print()
-        print(json.dumps({'success': False, 'error': 'Password must be at least 4 characters'}))
+        print(json.dumps({'success': False, 'error': 'Password must be at least 8 characters'}))
         sys.exit(0)
 
     if role not in ('admin', 'user'):

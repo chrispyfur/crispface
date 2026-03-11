@@ -52,10 +52,10 @@ if method == 'POST':
     # Update password
     if body.get('password'):
         new_password = str(body['password'])
-        if len(new_password) < 4:
+        if len(new_password) < 8:
             print('Content-Type: application/json')
             print()
-            print(json.dumps({'success': False, 'error': 'Password must be at least 4 characters'}))
+            print(json.dumps({'success': False, 'error': 'Password must be at least 8 characters'}))
             sys.exit(0)
         target['password_hash'] = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt(rounds=12)).decode()
 

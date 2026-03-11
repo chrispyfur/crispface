@@ -135,6 +135,7 @@ def set_cookie_header(value, max_age=None):
         COOKIE_NAME + '=' + value,
         'Path=/crispface',
         'HttpOnly',
+        'Secure',
         'SameSite=Strict',
         'Max-Age=' + str(max_age)
     ]

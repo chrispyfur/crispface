@@ -6,6 +6,5 @@ words = [
 ]
 
 print('Content-Type: application/json')
-print('Access-Control-Allow-Origin: *')
 print()
 print(json.dumps({'value': random.choice(words)}))

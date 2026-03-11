@@ -1255,8 +1255,8 @@
             }
             var password = document.getElementById('edit-password').value;
             if (password) {
-                if (password.length < 4) {
-                    errorEl.textContent = 'Password must be at least 4 characters';
+                if (password.length < 8) {
+                    errorEl.textContent = 'Password must be at least 8 characters';
                     errorEl.style.display = 'block';
                     return;
                 }
@@ -1396,8 +1396,8 @@
                 errorEl.style.display = 'block';
                 return;
             }
-            if (!newPw || newPw.length < 4) {
-                errorEl.textContent = 'New password must be at least 4 characters';
+            if (!newPw || newPw.length < 8) {
+                errorEl.textContent = 'New password must be at least 8 characters';
                 errorEl.style.display = 'block';
                 return;
             }
@@ -1590,7 +1590,7 @@
             }
 
             function setStatus(msg, cls) {
-                statusEl.innerHTML = msg;
+                statusEl.textContent = msg;
                 statusEl.className = cls || '';
             }
 
