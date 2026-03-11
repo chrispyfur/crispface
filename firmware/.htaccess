@@ -1,1 +1,6 @@
 Require all denied
+
+# Allow browser access to font files used by the editor
+<FilesMatch "\.ttf$">
+    Require all granted
+</FilesMatch>
