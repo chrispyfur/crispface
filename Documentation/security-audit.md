@@ -1,10 +1,10 @@
-# CrispFace Security Audit — 2026-02-25
+# CrispFace Security Audit — v1.0 (2026-03-11)
 
-Thorough review of the full codebase. Findings below, prioritised by severity.
+Full security review of the CrispFace codebase at v1.0 release. This supersedes the initial audit from 2026-02-25.
 
 ---
 
-## CRITICAL
+## Critical
 
 ### 1. `lib/` and `firmware/` directories are web-accessible
 
@@ -12,100 +12,136 @@ No `.htaccess` in `lib/` or `firmware/`. Anyone can browse to:
 - `/crispface/lib/secrets.py` — the HMAC signing key used to forge auth cookies for any user
 - `/crispface/firmware/include/config.h` — API tokens, WiFi credentials, server URL
 
-**Fix:** Create `lib/.htaccess` and `firmware/.htaccess` with `Require all denied`.
+**Fix:** Create `lib/.htaccess` and `firmware/.htaccess` containing `Require all denied`.
 
-### 2. `build_firmware.php` has zero authentication
+### 2. `build_firmware.php` has no authentication
 
-No session, cookie, or Bearer token check. Anyone on the internet can:
-- Trigger CPU-intensive PlatformIO builds (DoS)
-- Build firmware for any user's watch (searches ALL users' directories, line 52-66)
-- Expose API tokens and WiFi creds injected into built binaries
+No session, cookie, or Bearer token check. Any unauthenticated request can:
+- Trigger CPU-intensive PlatformIO builds (denial of service)
+- Build firmware for any user's watch (searches across all users' directories)
+- Expose API tokens and WiFi credentials baked into compiled binaries
 
-**Fix:** Add cookie-based auth check at the top. Scope watch search to authenticated user's directory only.
+**Fix:** Add session-based auth at the top of the file. Scope watch search to the authenticated user's directory only.
 
 ### 3. `resolve_source()` path traversal in `watch_faces.py`
 
-Lines 34-52: after stripping the `/crispface/api/` prefix, the remaining path goes straight into `os.path.join(API_DIR, rel_path)`. A face with `source: "/crispface/api/../../lib/secrets.py"` would execute any `.py` file in the project tree.
+Lines 34-52: after stripping the `/crispface/api/` prefix, the remaining path goes into `os.path.join(API_DIR, rel_path)` and then `subprocess.run()`. A face with `source: "/crispface/api/../../lib/secrets.py"` would execute any `.py` file reachable from the project tree.
 
-**Fix:** After resolving `script_path`, verify `os.path.realpath(script_path)` starts with `os.path.realpath(API_DIR)`.
+**Fix:** After resolving `script_path`, verify `os.path.realpath(script_path)` starts with `os.path.realpath(API_DIR)`:
+```python
+script_path = os.path.realpath(os.path.join(API_DIR, rel_path))
+if not script_path.startswith(os.path.realpath(API_DIR) + os.sep):
+    return None
+```
 
-### 4. SSRF in `ics_calendar.py`
+### 4. `watch_id` unsanitised in `watch_faces.py`
 
-`fetch_ics()` (line 399-408) calls `urllib.request.urlopen()` on user-supplied URLs with no validation. Allows:
+Line 112: `watch_id` from query params goes directly into a file path without hex-only sanitisation (unlike `store.py` which strips to `[a-f0-9]`). A crafted `watch_id` with `../` could traverse to `data/users.json` and leak password hashes and API tokens.
+
+**Fix:** Apply the same sanitisation used in `store.py`:
+```python
+safe_id = re.sub(r'[^a-f0-9]', '', watch_id)
+```
+
+### 5. SSRF in `ics_calendar.py`
+
+`fetch_ics()` (line ~420) calls `urllib.request.urlopen()` on user-supplied URLs with no scheme validation. Allows:
 - `file:///etc/passwd` — read local files
-- `http://169.254.169.254/` — cloud metadata
+- `http://169.254.169.254/` — cloud metadata endpoints
 - `http://localhost:*/` — internal service probing
 
-**Fix:** Validate scheme is `http`/`https`. Resolve hostname and reject private/loopback IPs (127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.x).
+**Fix:** Validate URL scheme is `http` or `https` only. Optionally reject private/loopback IP ranges:
+```python
+from urllib.parse import urlparse
+parsed = urlparse(url)
+if parsed.scheme not in ('http', 'https'):
+    return None
+```
 
 ---
 
-## HIGH
+## High
 
-### 5. Auth cookie missing `Secure` flag
+### 6. Auth cookie missing `Secure` flag
 
-`lib/auth.py` line ~138 — cookie is `HttpOnly` + `SameSite=Strict` but no `Secure`. Can be sent over HTTP, allowing MITM interception.
+`lib/auth.py` line ~138: cookie is `HttpOnly` + `SameSite=Strict` but no `Secure`. The cookie can be sent over HTTP, allowing MITM interception.
 
 **Fix:** Add `'Secure'` to the cookie parts list.
 
-### 6. `watch_id` unsanitized in `watch_faces.py`
+### 7. `innerHTML` XSS in `app.js`
 
-Line 112: `watch_id` from query params goes directly into file path. No hex-only sanitization like `store.py` uses.
+`setStatus()` (line ~1592) uses `innerHTML` with server-returned strings including `data.error` and `data.version`. If an attacker controls the build output or a malicious server response is reflected, HTML injection is possible.
 
-**Fix:** Apply `re.sub(r'[^a-f0-9]', '', watch_id)` after reading from query string.
-
-### 7. `exec()` used for secrets loading
-
-`lib/config.py` lines 26-28 use `exec()` to load `secrets.py`. Dangerous anti-pattern — if the file is ever tampered with, arbitrary code runs on every API request.
-
-**Fix:** Replace with `json.load()` on a `secrets.json` file.
+**Fix:** Use `statusEl.textContent = msg` instead of `innerHTML`, or escape all interpolated values with the existing `escHtml()` function before passing to `setStatus`.
 
 ### 8. Error details leaked to clients
 
-- `router.php` line 99: returns Python `stderr` in response (file paths, tracebacks)
-- `build_firmware.php`: returns full build output in error responses
+`router.php` line ~99: returns Python `stderr` (tracebacks, file paths) in the JSON response `detail` field. `build_firmware.php` also returns full build output in error responses. Leaks implementation details useful for reconnaissance.
 
-**Fix:** Remove detail/output from responses. Log to `error_log()` instead.
+**Fix:** Log `stderr` server-side only. Return a generic error message to the client.
 
 ---
 
-## MEDIUM
+## Medium
 
 ### 9. No login rate limiting
 
-`api/login.py` has no rate limiting. Combined with 4-char min password, brute-force is feasible.
+`api/login.py` has no account lockout, exponential backoff, or request rate limiting. bcrypt at cost 12 adds ~200-500ms per attempt which partially mitigates online brute-force, but combined with the weak minimum password length (finding 10), this is a meaningful risk.
 
-**Fix:** Track failed attempts per IP in a flat file. Lock out after 10 failures for 5 minutes.
+**Fix:** Track failed attempts per IP in a flat file. Lock out after 10 failures for 5 minutes. Or use Apache `mod_evasive`.
 
 ### 10. Weak minimum password (4 characters)
 
-Set in `api/users.py:49`, `api/user.py:55`, `api/change_password.py:30`, `js/app.js:1258,1399`.
+Set in `api/users.py`, `api/user.py`, `api/change_password.py`, and `js/app.js`. Below NIST SP 800-63B guidance (minimum 8).
 
-**Fix:** Change to 8 characters in all locations.
+**Fix:** Change minimum to 8 characters in all locations.
 
 ### 11. Build process race condition
 
-Concurrent builds can cross-contaminate `config.h`, potentially leaking one user's secrets into another's firmware.
+Concurrent builds can cross-contaminate `config.h`, potentially leaking one user's WiFi credentials and API token into another's firmware binary.
 
-**Fix:** Use `flock()` on a lockfile around the config modification + build + restore.
+**Fix:** Use `flock()` on a lockfile around the config modification + build + restore sequence.
+
+### 12. No CSRF tokens
+
+All state-mutating API endpoints use cookie-based session auth with no CSRF token. `SameSite=Strict` on the cookie mitigates this for modern browsers, but protection is browser-dependent.
+
+**Accepted risk** for v1.0 — `SameSite=Strict` is sufficient for this use case.
 
 ---
 
-## LOW
+## Low / Informational
 
-### 12. Unnecessary CORS header
+### 13. No HTTP security headers
 
-`api/sources/sample_word.py` line 9 sets `Access-Control-Allow-Origin: *`. Minimal risk but unnecessary.
+No `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options`, or `Referrer-Policy` headers. Leaves the app vulnerable to clickjacking and MIME sniffing.
 
-**Fix:** Remove the line.
+**Fix:** Add to root `.htaccess`:
+```apache
+Header always set X-Frame-Options "DENY"
+Header always set X-Content-Type-Options "nosniff"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+```
+
+### 14. `exec()` for secrets loading
+
+`lib/config.py` uses `exec()` to load `secrets.py`. Any write access to that file is equivalent to arbitrary code execution. Unconventional but acceptable for a flat-file PHP/Python deployment where file write access already implies code execution.
+
+### 15. `data/.htaccess` depends on `AllowOverride`
+
+The `Deny from all` directive in `data/.htaccess` only works if the Apache virtual host config includes `AllowOverride All` (or at least `Limit`). If `AllowOverride` is `None`, the `.htaccess` is silently ignored and `data/users.json` is publicly readable.
+
+### 16. Unnecessary CORS header
+
+`api/sources/sample_word.py` sets `Access-Control-Allow-Origin: *`. Minimal risk but unnecessary.
 
 ---
 
 ## By Design (No Fix Needed)
 
-- **Admin script upload**: Admins can write Python via complication editor. Security boundary = "admin is trusted".
+- **Admin script upload**: Admins can write arbitrary Python via the complication editor. Security boundary = "admin is trusted". If multi-admin deployment is planned, this would need sandboxing.
 - **WiFi passwords in API responses**: Required for firmware OTA WiFi updates.
-- **API tokens stored plaintext**: Needed for Bearer auth comparison.
+- **API tokens stored plaintext**: Needed for Bearer auth comparison (timing-safe via `hmac.compare_digest`).
 - **No CSRF tokens**: Mitigated by `SameSite=Strict` cookie. Acceptable for this use case.
 - **No session revocation**: Stateless cookies with 1-hour expiry. Acceptable trade-off.
 
@@ -125,4 +161,25 @@ Concurrent builds can cross-contaminate `config.h`, potentially leaking one user
 
 ---
 
-## TODO: Come back and implement these fixes
+## Summary
+
+| # | Severity | Component | Issue | Status |
+|---|----------|-----------|-------|--------|
+| 1 | Critical | `lib/`, `firmware/` | Directories web-accessible (secrets exposed) | Open |
+| 2 | Critical | `build_firmware.php` | No authentication on build endpoint | Open |
+| 3 | Critical | `watch_faces.py` | Path traversal via `source` field | Open |
+| 4 | Critical | `watch_faces.py` | Path traversal via `watch_id` | Open |
+| 5 | Critical | `ics_calendar.py` | SSRF via user-controlled ICS URLs | Open |
+| 6 | High | `lib/auth.py` | Auth cookie missing `Secure` flag | Open |
+| 7 | High | `js/app.js` | `innerHTML` XSS in `setStatus()` | Open |
+| 8 | High | `router.php` | Python stderr leaked to client | Open |
+| 9 | Medium | `api/login.py` | No login rate limiting | Open |
+| 10 | Medium | Multiple files | Minimum 4-character password | Open |
+| 11 | Medium | `build_firmware.php` | Build race condition | Open |
+| 12 | Medium | All API endpoints | No CSRF tokens (SameSite only) | Accepted |
+| 13 | Low | Root `.htaccess` | No security response headers | Open |
+| 14 | Info | `lib/config.py` | `exec()` for secrets loading | Accepted |
+| 15 | Info | `data/.htaccess` | Depends on `AllowOverride` | Accepted |
+| 16 | Info | `sample_word.py` | Unnecessary CORS header | Open |
+
+**Recommendation**: Findings 1-5 should be fixed before exposing this to untrusted users. For personal/trusted-group deployments behind a firewall, the risk is manageable. Findings 6-8 are straightforward hardening that should be applied. Findings 9-11 are nice-to-have improvements.

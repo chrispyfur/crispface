@@ -1,4 +1,4 @@
-# CrispFace Firmware Specification v0.6
+# CrispFace Firmware Specification v1.0
 
 Firmware for the Watchy ESP32-S3 thin client that renders CrispFace watch faces.
 
@@ -267,31 +267,31 @@ WiFi networks are configured per-watch in the web UI. The build process injects 
 
 ## Implemented vs Planned
 
-### Implemented (v0.2.x)
+### Implemented (v1.0)
 - Text complications with positioning, fonts (3 families, 6 sizes, bold), alignment, colour
 - Local complications: time, date, battery, version
 - Server-side complication resolution (weather, calendar, etc.)
+- Calendar alerts with gentle and insistent buzz modes, configurable pre-alert timing
 - Face cycling (top-right/bottom-right buttons)
-- Manual sync (top-left button)
-- Auto-sync on stale interval
+- Manual sync (top-left button), double-press full refresh, long-hold debug screen
+- Auto-sync on stale interval (driven by shortest complication refresh)
 - SPIFFS face caching with crash recovery
 - Progress bar overlay during sync
-- Stale data italic rendering
-- Partial refresh (no flicker)
-- Double-press full refresh
+- Stale data italic rendering (per-row pixel X-shear)
+- Partial refresh by default (no flicker)
 - Per-watch WiFi networks (up to 5, scans and connects to strongest)
+- OTA WiFi credential updates via API response
 - Build-on-demand with auto version bump
 - Web Serial flashing
+- Weather icon rendering (Met Office weather codes)
 
-### Not Yet Implemented
-- Bitmap complications
+### Out of Scope
+The following were considered but are not planned:
+- Bitmap/image complications
 - Progress bar complications
 - QR code complications
-- Custom button actions (HTTP POST)
-- Long press / double tap button actions
-- Haptic feedback
-- OTA firmware updates
-- Offline indicator icon
+- Custom button actions
+- OTA firmware updates (reflash via Web Serial if needed)
 
 ---
 
@@ -306,3 +306,4 @@ WiFi networks are configured per-watch in the web UI. The build process injects 
 | 0.4.1 | 2026-02-11 | Split into separate firmware and web builder specs. Added Web Serial section. |
 | 0.5 | 2026-02-14 | Updated to match implemented firmware v0.2.x: single-file architecture, SPIFFS caching, progress bar sync, font mapping, partial refresh, double-press full refresh, build-on-demand, implemented vs planned tracking. |
 | 0.6 | 2026-02-17 | Added FreeSerif font family, 36pt/48pt custom font sizes, per-watch WiFi networks, version complication. Removed outdated 48pt disabled note. Updated config.h WiFi defines. |
+| 1.0 | 2026-03-11 | v1.0 release. Added calendar alerts, weather icons, OTA WiFi, debug sync screen. Marked feature-complete. |

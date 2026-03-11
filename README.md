@@ -10,11 +10,17 @@ The server does all the heavy lifting. It resolves weather, calendar events, and
 
 CrispFace extends the [stock Watchy firmware](https://github.com/sqfmi/Watchy) — the `CrispFace` class inherits from `Watchy` and overrides `drawWatchFace()` and `handleButtonPress()` to add server-synced faces, complications, and alerts. Everything else — deep sleep, RTC alarms, the settings menu, NTP time sync — comes from the Watchy base class.
 
+## Status
+
+**v1.0 — Feature complete.** This project is considered finished and ready for general release to tinkerers. It does everything it set out to do: design watch faces in a browser, sync them to a Watchy over WiFi, and render them on the e-paper display.
+
+There are no plans for further feature development. Bug fixes may happen if issues are reported. The codebase is intentionally simple — single-file firmware, flat-file JSON storage, no external frameworks — and is a good starting point for anyone who wants to fork and extend it.
+
 ## How It Works
 
 ```
 ┌─────────────────┐         ┌─────────────┐
-│  Python CGI API │ ◄─────► │  Web Editor  │
+│  Python CGI API │ <------> │  Web Editor  │
 │  (via router.php)│         │  (Fabric.js) │
 └────────┬────────┘         └─────────────┘
          │
@@ -59,6 +65,97 @@ Each complication has its own refresh interval (configured in the editor, in min
 
 New complication sources are Python CGI scripts that return `{"value": "..."}`. See [Documentation/complications.md](Documentation/complications.md).
 
+## Requirements
+
+### Web Server
+
+| Component | Version | Purpose |
+|---|---|---|
+| Linux | Any modern distro | Tested on Debian 13 |
+| Apache | 2.4+ | Web server with `mod_rewrite` and `AllowOverride All` |
+| PHP | 8.4+ | Serves HTML pages, handles firmware build endpoint |
+| Python | 3.10+ | CGI API endpoints (all backend logic) |
+| python3-bcrypt | Any | Password hashing for user authentication |
+
+**For firmware builds (optional — only needed if you want to compile and flash from the browser):**
+
+| Component | Version | Purpose |
+|---|---|---|
+| python3-pip | Any | PlatformIO installation |
+| PlatformIO | 6.x | ESP32-S3 firmware compiler (includes esptool) |
+
+**For custom font generation (optional — only needed if you want new font sizes beyond the bundled 9/12/18/24/36/48pt):**
+
+| Component | Purpose |
+|---|---|
+| pkg-config | Locates FreeType library flags |
+| libfreetype-dev | FreeType headers for fontconvert compilation |
+| gcc | C compiler for building fontconvert |
+
+Python standard library only — no pip packages required beyond `bcrypt`. No JavaScript build step, no npm, no bundlers. The FreeFont TTF source files are bundled in `firmware/tools/fonts/`.
+
+### Firmware (Watchy Hardware)
+
+| Component | Details |
+|---|---|
+| Watch | [Watchy V3](https://watchy.sqfmi.com/) by SQFMI (ESP32-S3 variant) |
+| Display | 200x200 1-bit e-paper (GDEH0154D67, driven by GxEPD2) |
+| Chip | ESP32-S3 with 8MB flash |
+| Connectivity | WiFi 802.11 b/g/n (built into ESP32-S3) |
+| Buttons | 4 physical buttons (top-left, top-right, bottom-left, bottom-right) |
+| Power | LiPo battery with ADC voltage reading |
+
+**Firmware library dependencies** (managed automatically by PlatformIO):
+
+| Library | Version | Purpose |
+|---|---|---|
+| sqfmi/Watchy | 1.4.15 | Base firmware (display, RTC, WiFi, deep sleep) |
+| bblanchon/ArduinoJson | ^6 | JSON parsing (v7 conflicts with Watchy's bundled Arduino_JSON) |
+
+### Browser (for the web editor and flashing)
+
+| Feature | Required For | Browser Support |
+|---|---|---|
+| Modern JavaScript (ES6+) | Web editor | All modern browsers |
+| Canvas 2D API | Face editor rendering | All modern browsers |
+| Web Serial API | Firmware flashing | Chrome, Edge, Brave (Chromium-based only) |
+| HTTPS | Session cookies, Web Serial | Required |
+
+Firefox and Safari can use the face editor but cannot flash firmware (no Web Serial API). A Chromium-based browser is needed for the initial flash.
+
+### Flashing
+
+- **USB cable**: Must be a data-capable cable (not charge-only)
+- **Bootloader mode**: Hold top-left + bottom-left buttons while plugging in USB, or press reset while holding the boot button
+- The first flash is over USB via Web Serial; after that, all face and WiFi changes sync over the air
+
+## Quick Install
+
+```bash
+# Runtime + build essentials
+sudo apt-get install -y apache2 php python3 python3-pip python3-bcrypt
+
+# PlatformIO (user-level install, for firmware builds)
+pip install --user platformio
+
+# Font generation (optional)
+sudo apt-get install -y pkg-config libfreetype-dev gcc
+```
+
+See [Documentation/dependencies.md](Documentation/dependencies.md) for the full dependency list.
+
+## Getting Started
+
+1. Clone the repo and configure Apache to serve the `crispface/` directory with `AllowOverride All`
+2. Copy `firmware/include/config.h.example` to `config.h` and fill in your server URL
+3. Create a `data/` directory — the app will populate it on first use
+4. Create a `lib/secrets.py` with an HMAC key (see `lib/config.py` for the expected format)
+5. Log in, create a watch, design a face, build and flash
+
+The initial flash requires Chrome or Edge (Web Serial API). Put the watch into bootloader mode — hold the top-left button while plugging in USB. Use a data cable, not a charge-only one.
+
+After that first flash, all face design changes sync to the watch over WiFi automatically. Press top-left on the watch to force an immediate sync, or just wait — the firmware syncs on its own when cached data goes stale.
+
 ## Tech Stack
 
 - **Server**: PHP (page serving, firmware builds), Python 3 CGI (all API endpoints, routed via `router.php`)
@@ -92,31 +189,6 @@ crispface/
 └── users.html              # User management (admin)
 ```
 
-## Dependencies
-
-**Server:**
-- Apache 2.4+ with PHP 8.4+
-- Python 3 with `python3-bcrypt`
-
-**Firmware builds:**
-- PlatformIO (`pip install platformio`)
-
-**Font generation (optional — only for adding new font sizes):**
-- `pkg-config`, `libfreetype-dev`, `gcc`
-
-See [Documentation/dependencies.md](Documentation/dependencies.md) for the full list.
-
-## Getting Started
-
-1. Clone the repo and point Apache at the `crispface/` directory
-2. Copy `firmware/include/config.h.example` to `config.h` and fill in your server URL
-3. Create a `data/` directory (the app will populate it on first use)
-4. Log in, create a watch, design a face, build and flash
-
-The initial flash requires Chrome or Edge (Web Serial API). Put the watch into bootloader mode — hold the top-left button while plugging in USB. Use a data cable, not a charge-only one.
-
-After that first flash, all face design changes sync to the watch over WiFi automatically. Press top-left on the watch to force an immediate sync, or just wait — the firmware syncs on its own when cached data goes stale.
-
 ## Button Layout
 
 ```
@@ -143,11 +215,20 @@ After that first flash, all face design changes sync to the watch over WiFi auto
 - [Firmware Spec](Documentation/crispface-firmware-spec.md)
 - [Developing Complications](Documentation/complications.md)
 - [Dependencies](Documentation/dependencies.md)
+- [Security Audit](Documentation/security-audit.md)
 
-## Status
+## Security
 
-Active development. Currently at v0.2.x — text complications are solid, calendar alerts work, build-and-flash pipeline is reliable. Bitmap/image complications, QR codes, and OTA firmware updates are on the list but not yet started.
+This is a self-hosted application intended for personal use or small trusted groups. See [Documentation/security-audit.md](Documentation/security-audit.md) for the full security audit. Key points:
+
+- Session cookies are HMAC-SHA256 signed with `HttpOnly` and `SameSite=Strict`
+- Firmware authentication uses pre-shared Bearer tokens
+- Passwords are hashed with bcrypt (cost 12)
+- Data directory is protected from web access via `.htaccess`
+- Admin complication scripting allows arbitrary Python execution — this is by design, admins are trusted
+
+If deploying on a public server, review the security audit document and apply the recommended hardening measures.
 
 ## Licence
 
-This is a personal project. No licence yet.
+MIT

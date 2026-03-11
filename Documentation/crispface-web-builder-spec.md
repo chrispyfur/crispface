@@ -1,4 +1,4 @@
-# CrispFace Web Builder & Server Specification v0.6
+# CrispFace Web Builder & Server Specification v1.0
 
 The server-side platform for designing, managing, and serving watch faces to Watchy ESP32-S3 devices.
 
@@ -346,24 +346,28 @@ Requires Chrome or Edge 89+ (Web Serial API). Flash button must be clicked direc
 
 ## Implementation Status
 
-### Implemented (v0.2.x)
+### Implemented (v1.0)
 - Multi-user with admin/user roles
 - Face editor with Fabric.js canvas and pixel-accurate font preview
 - Text complications with positioning, fonts (3 families, 6 sizes, bold), alignment, colour
 - Complication type system with admin-managed Python source scripts
 - Data sources: time, weather (Open-Meteo + Met Office), ICS calendar, battery, version, custom text
+- Calendar alerts with per-feed gentle/insistent modes and configurable pre-alert timing
+- Weather icon rendering (Met Office weather codes)
 - Face CRUD with duplicate, drag-to-reorder, per-watch assignment
 - Watch CRUD with per-watch WiFi networks (up to 5), timezone
-- Firmware sync endpoint with Bearer auth and server-side value resolution
+- Firmware sync endpoint with Bearer auth, parallel server-side value resolution
 - Build-on-demand firmware compilation with auto version bump
 - Web Serial flashing with flash history log
+- OTA WiFi credential and face updates (no reflash needed after initial setup)
 - Flat-file JSON storage (no database)
 
-### Not Yet Implemented
-- Bitmap complications (image import, 1-bit dithering)
+### Out of Scope
+The following were considered but are not planned:
+- Bitmap/image complications
 - Progress bar complications
 - QR code complications
-- Custom button actions (configurable per-face)
+- Custom button actions
 - OTA firmware updates
 - Device sync status dashboard
 
@@ -380,3 +384,4 @@ Requires Chrome or Edge 89+ (Web Serial API). Flash button must be clicked direc
 | 0.4.1 | 2026-02-11 | Split into separate web builder and firmware specs. |
 | 0.5 | 2026-02-14 | Added implementation status. Web Serial flashing implemented. |
 | 0.6 | 2026-02-17 | Complete rewrite to match actual implementation. Replaced speculative API/controls/bindings with real endpoints, storage model, and data flow. Added multi-user, complication types, per-watch WiFi, font system documentation. Removed crisprain-spec.md (redundant combined spec). |
+| 1.0 | 2026-03-11 | v1.0 release. Added calendar alerts, weather icons, OTA WiFi, parallel source resolution. Marked feature-complete. |
