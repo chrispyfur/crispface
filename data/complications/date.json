@@ -2,10 +2,15 @@
     "id": "date",
     "name": "Date",
     "description": "Current date display. On the actual watch, date is rendered locally; this endpoint exists for editor simulation.",
-    "script": "time.py",
+    "script": "date.py",
     "variables": [
-        {"name": "format", "label": "Format", "default": "date"}
+        {
+            "name": "format",
+            "label": "Format",
+            "default": "D j M",
+            "help": "D=Mon l=Monday d=01 j=1 M=Jan F=January m=01 n=1 Y=2026 y=26"
+        }
     ],
     "created_at": "2026-02-16T00:00:00+00:00",
-    "updated_at": "2026-02-16T00:00:00+00:00"
+    "updated_at": "2026-03-27T00:00:00+00:00"
 }
