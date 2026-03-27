@@ -5,7 +5,7 @@
     var panel = document.getElementById('props-panel');
     var currentObject = null;
 
-    var LOCAL_TYPES = ['time', 'date', 'battery'];
+    var LOCAL_TYPES = ['time', 'battery'];
 
     function isLocal(d) {
         return LOCAL_TYPES.indexOf(d.complication_type) >= 0

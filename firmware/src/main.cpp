@@ -1512,44 +1512,16 @@ private:
         if (strcmp(type, "date") == 0) {
             static const char* days[] =
                 {"Sun","Mon","Tue","Wed","Thu","Fri","Sat"};
-            static const char* fullDays[] =
-                {"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
             static const char* mons[] =
                 {"Jan","Feb","Mar","Apr","May","Jun",
                  "Jul","Aug","Sep","Oct","Nov","Dec"};
-            static const char* fullMons[] =
-                {"January","February","March","April","May","June",
-                 "July","August","September","October","November","December"};
             int dow = currentTime.Wday - 1; // Wday is 1-7 (Sun=1), array is 0-6
             int mon = currentTime.Month - 1;
             if (dow < 0 || dow > 6) dow = 0;
             if (mon < 0 || mon > 11) mon = 0;
-            int year = (int)currentTime.Year + 1970;
-
-            const char* fmt = comp["params"]["format"] | "D j M";
-            char buf[32];
-            int pos = 0;
-            for (int i = 0; fmt[i] != '\0' && pos < 31; i++) {
-                char ch = fmt[i];
-                const char* insert = nullptr;
-                char tmp[8];
-                if      (ch == 'D') { insert = days[dow]; }
-                else if (ch == 'l') { insert = fullDays[dow]; }
-                else if (ch == 'd') { snprintf(tmp, sizeof(tmp), "%02d", currentTime.Day); insert = tmp; }
-                else if (ch == 'j') { snprintf(tmp, sizeof(tmp), "%d",   currentTime.Day); insert = tmp; }
-                else if (ch == 'M') { insert = mons[mon]; }
-                else if (ch == 'F') { insert = fullMons[mon]; }
-                else if (ch == 'm') { snprintf(tmp, sizeof(tmp), "%02d", currentTime.Month); insert = tmp; }
-                else if (ch == 'n') { snprintf(tmp, sizeof(tmp), "%d",   currentTime.Month); insert = tmp; }
-                else if (ch == 'Y') { snprintf(tmp, sizeof(tmp), "%d",   year); insert = tmp; }
-                else if (ch == 'y') { snprintf(tmp, sizeof(tmp), "%02d", year % 100); insert = tmp; }
-                if (insert) {
-                    while (*insert && pos < 31) buf[pos++] = *insert++;
-                } else {
-                    buf[pos++] = ch;
-                }
-            }
-            buf[pos] = '\0';
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%s %d %s",
+                     days[dow], currentTime.Day, mons[mon]);
             return String(buf);
         }
         return String(type);

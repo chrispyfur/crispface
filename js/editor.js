@@ -919,7 +919,7 @@
         var listEl = document.getElementById('face-refresh-list');
         if (!listEl) return;
         var complications = face.complications || [];
-        var LOCAL_TYPES = { time: true, date: true, battery: true, version: true };
+        var LOCAL_TYPES = { time: true, battery: true, version: true };
 
         var items = [];
         for (var i = 0; i < complications.length; i++) {
