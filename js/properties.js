@@ -157,6 +157,9 @@
                         if (d.complication_type === 'uk-weather' && v.name === 'town') {
                             html += '<span class="prop-town-status" id="prop-town-status"></span>';
                         }
+                        if (v.help) {
+                            html += '<span class="prop-hint">' + escHtml(v.help) + '</span>';
+                        }
                         html += '</div>';
                     }
                 }
