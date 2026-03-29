@@ -8,6 +8,11 @@ and local complications (time, date, battery) flagged for on-device rendering.
 """
 import sys, os, json, time, re, urllib.parse, subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone as dt_timezone
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+except ImportError:
+    _ZoneInfo = None
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 from auth import get_user_from_bearer
@@ -280,9 +285,22 @@ for face in faces:
         else:
             del comp['alerts']
 
-respond({
+utc_offset = None
+if _ZoneInfo:
+    try:
+        tz_name = watch.get('timezone', '')
+        if tz_name:
+            now_local = datetime.now(tz=dt_timezone.utc).astimezone(_ZoneInfo(tz_name))
+            utc_offset = int(now_local.utcoffset().total_seconds())
+    except Exception:
+        utc_offset = None
+
+resp = {
     'success': True,
     'faces': faces,
     'wifi': watch.get('wifi_networks', []),
     'fetched_at': int(time.time()),
-})
+}
+if utc_offset is not None:
+    resp['utc_offset'] = utc_offset
+respond(resp)

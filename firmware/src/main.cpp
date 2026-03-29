@@ -809,6 +809,17 @@ private:
         // Get payload, sync time, then kill WiFi
         String payload = http.getString();
         http.end();
+
+        // Apply server-supplied UTC offset (DST-aware) before syncing NTP.
+        // configTime was called above with the compiled-in GMT offset.
+        // Re-calling it here (no NTP server) updates the offset applied
+        // to the already-running NTP sync before cfSyncNTP() reads local time.
+        {
+            StaticJsonDocument<128> tzDoc;
+            if (!deserializeJson(tzDoc, payload) && tzDoc.containsKey("utc_offset")) {
+                configTime(tzDoc["utc_offset"].as<long>(), 0, "");
+            }
+        }
         cfSyncNTP();
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
