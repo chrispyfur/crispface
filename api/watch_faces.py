@@ -8,23 +8,6 @@ and local complications (time, date, battery) flagged for on-device rendering.
 """
 import sys, os, json, time, re, urllib.parse, subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
-def _get_posix_tz(tz_name):
-    """Return the POSIX TZ string for an IANA timezone name by reading the TZif file."""
-    try:
-        with open(f'/usr/share/zoneinfo/{tz_name}', 'rb') as f:
-            data = f.read()
-        if data[:4] != b'TZif':
-            return None
-        last_nl = data.rfind(b'\n')
-        if last_nl < 0:
-            return None
-        prev_nl = data.rfind(b'\n', 0, last_nl)
-        if prev_nl < 0:
-            return None
-        result = data[prev_nl + 1:last_nl].decode('ascii').strip()
-        return result if result else None
-    except Exception:
-        return None
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib'))
 from auth import get_user_from_bearer
@@ -297,14 +280,9 @@ for face in faces:
         else:
             del comp['alerts']
 
-posix_tz = _get_posix_tz(watch.get('timezone', ''))
-
-resp = {
+respond({
     'success': True,
     'faces': faces,
     'wifi': watch.get('wifi_networks', []),
     'fetched_at': int(time.time()),
-}
-if posix_tz:
-    resp['posix_tz'] = posix_tz
-respond(resp)
+})

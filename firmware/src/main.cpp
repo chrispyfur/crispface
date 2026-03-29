@@ -22,7 +22,6 @@ RTC_DATA_ATTR int  cfLastSyncTry  = 0;     // timestamp of last sync attempt (fo
 RTC_DATA_ATTR bool cfFaceChanging = false; // skip sync when cycling faces
 RTC_DATA_ATTR int  cfSyncFails    = 0;     // consecutive sync failures (for progressive backoff)
 RTC_DATA_ATTR int  cfLastWifiIdx  = -1;    // last successful WiFi network index (skip scan on reconnect)
-RTC_DATA_ATTR char cfPosixTz[64]  = {};    // POSIX TZ string, updated from API (handles DST automatically)
 
 // ---- Alert system ----
 struct CfAlert {
@@ -88,8 +87,7 @@ public:
             tv.tv_sec = seedTime;
             tv.tv_usec = 0;
             settimeofday(&tv, NULL);
-            if (cfPosixTz[0] == '\0') strncpy(cfPosixTz, CRISPFACE_POSIX_TZ, sizeof(cfPosixTz) - 1);
-            configTzTime(cfPosixTz, "");
+            configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "");
             RTC.read(currentTime);
             cfTimeSeeded = true;
         }
@@ -756,10 +754,8 @@ private:
             dbg += "dBm\n";
         }
 
-        // Start NTP in background (non-blocking) — runs while HTTP proceeds.
-        // cfPosixTz encodes DST rules and persists across deep sleep; updated from API each sync.
-        if (cfPosixTz[0] == '\0') strncpy(cfPosixTz, CRISPFACE_POSIX_TZ, sizeof(cfPosixTz) - 1);
-        configTzTime(cfPosixTz, "pool.ntp.org");
+        // Start NTP in background (non-blocking) — runs while HTTP proceeds
+        configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "pool.ntp.org");
 
         syncProgress(20);
 
@@ -813,21 +809,6 @@ private:
         // Get payload, sync time, then kill WiFi
         String payload = http.getString();
         http.end();
-
-        // Cache POSIX TZ string from server for use on the NEXT sync.
-        // cfPosixTz is RTC_DATA_ATTR so it survives deep sleep.
-        // configTzTime was already called above with the current cfPosixTz — no
-        // second call needed; this just keeps the cached value up to date.
-        {
-            StaticJsonDocument<16> filter;
-            filter["posix_tz"] = true;
-            StaticJsonDocument<96> tzDoc;
-            deserializeJson(tzDoc, payload, DeserializationOption::Filter(filter));
-            if (tzDoc.containsKey("posix_tz")) {
-                const char* newTz = tzDoc["posix_tz"] | "";
-                if (newTz[0] != '\0') strncpy(cfPosixTz, newTz, sizeof(cfPosixTz) - 1);
-            }
-        }
         cfSyncNTP();
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);

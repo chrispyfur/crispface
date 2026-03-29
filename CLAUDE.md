@@ -188,8 +188,7 @@ Calendar complications can include an `alerts` array in their API response. The 
     {"ssid": "HomeNetwork", "password": "secret123"},
     {"ssid": "OfficeWiFi", "password": "work456"}
   ],
-  "fetched_at": 1707900000,
-  "posix_tz": "GMT0BST,M3.5.0/1,M10.5.0"
+  "fetched_at": 1707900000
 }
 ```
 
