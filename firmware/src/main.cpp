@@ -58,6 +58,11 @@ public:
     }
 
     void drawWatchFace() {
+        // Restore timezone after deep sleep (RAM is wiped, TZ env var lost).
+        // Watchy32KRTC::read() uses localtime_r() which needs TZ set correctly.
+        configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "");
+        RTC.read(currentTime);
+
         // Mount SPIFFS every wake — it's unmounted after deep sleep
         if (!SPIFFS.begin(true)) {
             display.fillScreen(GxEPD_WHITE);
