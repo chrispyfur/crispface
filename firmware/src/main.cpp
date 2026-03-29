@@ -22,6 +22,7 @@ RTC_DATA_ATTR int  cfLastSyncTry  = 0;     // timestamp of last sync attempt (fo
 RTC_DATA_ATTR bool cfFaceChanging = false; // skip sync when cycling faces
 RTC_DATA_ATTR int  cfSyncFails    = 0;     // consecutive sync failures (for progressive backoff)
 RTC_DATA_ATTR int  cfLastWifiIdx  = -1;    // last successful WiFi network index (skip scan on reconnect)
+RTC_DATA_ATTR long cfUtcOffsetSec = (long)CRISPFACE_GMT_OFFSET * 3600; // DST-aware offset, updated from API
 
 // ---- Alert system ----
 struct CfAlert {
@@ -754,8 +755,9 @@ private:
             dbg += "dBm\n";
         }
 
-        // Start NTP in background (non-blocking) — runs while HTTP proceeds
-        configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "pool.ntp.org");
+        // Start NTP in background (non-blocking) — runs while HTTP proceeds.
+        // cfUtcOffsetSec persists across deep sleep so DST corrections survive reboots.
+        configTime(cfUtcOffsetSec, 0, "pool.ntp.org");
 
         syncProgress(20);
 
@@ -811,13 +813,17 @@ private:
         http.end();
 
         // Apply server-supplied UTC offset (DST-aware) before syncing NTP.
-        // configTime was called above with the compiled-in GMT offset.
-        // Re-calling it here (no NTP server) updates the offset applied
-        // to the already-running NTP sync before cfSyncNTP() reads local time.
+        // Use a filter so ArduinoJson skips the large faces array and reaches
+        // utc_offset without running out of memory. cfUtcOffsetSec is RTC_DATA_ATTR
+        // so the updated value survives deep sleep and is used on the next sync too.
         {
-            StaticJsonDocument<128> tzDoc;
-            if (!deserializeJson(tzDoc, payload) && tzDoc.containsKey("utc_offset")) {
-                configTime(tzDoc["utc_offset"].as<long>(), 0, "");
+            StaticJsonDocument<16> filter;
+            filter["utc_offset"] = true;
+            StaticJsonDocument<64> tzDoc;
+            deserializeJson(tzDoc, payload, DeserializationOption::Filter(filter));
+            if (tzDoc.containsKey("utc_offset")) {
+                cfUtcOffsetSec = tzDoc["utc_offset"].as<long>();
+                configTime(cfUtcOffsetSec, 0, "");
             }
         }
         cfSyncNTP();
