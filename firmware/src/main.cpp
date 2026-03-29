@@ -10,6 +10,9 @@
 #include "fonts.h"
 
 // ---- RTC_DATA_ATTR state (persists across deep sleep) ----
+RTC_DATA_ATTR uint8_t cfDbgSrvH  = 99; // hour received from server local_time
+RTC_DATA_ATTR uint8_t cfDbgSetH  = 99; // RTC hour immediately after RTC.set()
+RTC_DATA_ATTR uint8_t cfDbgWakeH = 99; // RTC hour on the very next wake
 RTC_DATA_ATTR int  cfFaceIndex   = 0;
 RTC_DATA_ATTR int  cfFaceCount   = 0;
 RTC_DATA_ATTR int  cfLastSync    = 0;
@@ -58,6 +61,7 @@ public:
     }
 
     void drawWatchFace() {
+        cfDbgWakeH = currentTime.Hour; // capture RTC hour as read by base class on this wake
         // Mount SPIFFS every wake — it's unmounted after deep sleep
         if (!SPIFFS.begin(true)) {
             display.fillScreen(GxEPD_WHITE);
@@ -826,8 +830,10 @@ private:
                 tm.Minute = lt["mi"] | 0;
                 tm.Second = lt["s"]  | 0;
                 tm.Wday   = lt["wd"] | 1;
+                cfDbgSrvH = tm.Hour;
                 RTC.set(tm);
                 RTC.read(currentTime);
+                cfDbgSetH = currentTime.Hour;
                 cfTimeSeeded = true;
             } else {
                 cfSyncNTP(); // fallback if server didn't include local_time
@@ -1016,6 +1022,13 @@ private:
             dbg += url;
             dbg += "\n";
             dbg += "HTTP: 200 OK\n";
+            dbg += "SrvH:";
+            dbg += (cfDbgSrvH == 99 ? String("?") : String(cfDbgSrvH));
+            dbg += " SetH:";
+            dbg += (cfDbgSetH == 99 ? String("?") : String(cfDbgSetH));
+            dbg += " WakeH:";
+            dbg += (cfDbgWakeH == 99 ? String("?") : String(cfDbgWakeH));
+            dbg += "\n";
             dbg += "Faces: ";
             dbg += String(cfFaceCount);
             dbg += " Sync: ";
