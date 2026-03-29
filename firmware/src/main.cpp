@@ -10,9 +10,6 @@
 #include "fonts.h"
 
 // ---- RTC_DATA_ATTR state (persists across deep sleep) ----
-RTC_DATA_ATTR uint8_t cfDbgSrvH  = 99; // hour received from server local_time
-RTC_DATA_ATTR uint8_t cfDbgSetH  = 99; // RTC hour immediately after RTC.set()
-RTC_DATA_ATTR uint8_t cfDbgWakeH = 99; // RTC hour on the very next wake
 RTC_DATA_ATTR int  cfFaceIndex   = 0;
 RTC_DATA_ATTR int  cfFaceCount   = 0;
 RTC_DATA_ATTR int  cfLastSync    = 0;
@@ -20,7 +17,6 @@ RTC_DATA_ATTR int  cfSyncInterval = 600; // seconds between server syncs
 RTC_DATA_ATTR bool cfNeedsSync   = true;  // sync on first boot
 RTC_DATA_ATTR int  cfLastBackPress = 0;   // for double-press detection
 RTC_DATA_ATTR bool cfTimeSeeded   = false; // set after build-epoch seed or NTP sync
-RTC_DATA_ATTR int  cfTzOffsetHours = 0;   // display timezone offset (BST=1, GMT=0), set from server
 RTC_DATA_ATTR bool cfFirstBoot    = true;  // true until first successful sync
 RTC_DATA_ATTR int  cfLastSyncTry  = 0;     // timestamp of last sync attempt (for backoff)
 RTC_DATA_ATTR bool cfFaceChanging = false; // skip sync when cycling faces
@@ -62,7 +58,6 @@ public:
     }
 
     void drawWatchFace() {
-        cfDbgWakeH = currentTime.Hour; // capture RTC hour as read by base class on this wake
         // Mount SPIFFS every wake — it's unmounted after deep sleep
         if (!SPIFFS.begin(true)) {
             display.fillScreen(GxEPD_WHITE);
@@ -811,30 +806,10 @@ private:
 
         syncProgress(40);
 
-        // Get payload, sync NTP for RTC, then compute display TZ offset from server local_time.
-        // NTP reliably sets the RTC to UTC. Server provides correct local time for the watch's
-        // timezone. The difference is stored as cfTzOffsetHours (BST=1, GMT=0) and applied
-        // at display time, so DST transitions are handled without touching the RTC.
+        // Get payload, sync time, then kill WiFi
         String payload = http.getString();
         http.end();
-        cfSyncNTP(); // sets RTC to NTP UTC time
-        {
-            StaticJsonDocument<16> filter;
-            filter["local_time"] = true;
-            StaticJsonDocument<128> ltDoc;
-            deserializeJson(ltDoc, payload, DeserializationOption::Filter(filter));
-            JsonObject lt = ltDoc["local_time"];
-            if (!lt.isNull()) {
-                int srvH = lt["h"] | 0;
-                cfDbgSrvH = (uint8_t)srvH;
-                cfDbgSetH = currentTime.Hour; // NTP-set UTC hour
-                int offset = srvH - (int)currentTime.Hour;
-                if (offset < -12) offset += 24;
-                if (offset >  12) offset -= 24;
-                cfTzOffsetHours = offset;
-            }
-            cfDbgSetH = currentTime.Hour;
-        }
+        cfSyncNTP();
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
 
@@ -1018,15 +993,6 @@ private:
             dbg += url;
             dbg += "\n";
             dbg += "HTTP: 200 OK\n";
-            dbg += "SrvH:";
-            dbg += (cfDbgSrvH == 99 ? String("?") : String(cfDbgSrvH));
-            dbg += " SetH:";
-            dbg += (cfDbgSetH == 99 ? String("?") : String(cfDbgSetH));
-            dbg += " WakeH:";
-            dbg += (cfDbgWakeH == 99 ? String("?") : String(cfDbgWakeH));
-            dbg += " TzOff:";
-            dbg += String(cfTzOffsetHours);
-            dbg += "\n";
             dbg += "Faces: ";
             dbg += String(cfFaceCount);
             dbg += " Sync: ";
@@ -1528,15 +1494,16 @@ private:
 
     String resolveLocal(const char* type, JsonObject comp) {
         if (strcmp(type, "time") == 0) {
-            int h = ((int)currentTime.Hour + cfTzOffsetHours + 24) % 24;
             const char* layout = comp["params"]["layout"] | "horizontal";
             if (strcmp(layout, "vertical") == 0) {
                 char buf[6];
-                snprintf(buf, sizeof(buf), "%02d\n%02d", h, currentTime.Minute);
+                snprintf(buf, sizeof(buf), "%02d\n%02d",
+                         currentTime.Hour, currentTime.Minute);
                 return String(buf);
             }
             char buf[6];
-            snprintf(buf, sizeof(buf), "%02d:%02d", h, currentTime.Minute);
+            snprintf(buf, sizeof(buf), "%02d:%02d",
+                     currentTime.Hour, currentTime.Minute);
             return String(buf);
         }
         if (strcmp(type, "version") == 0) {
