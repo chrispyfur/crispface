@@ -115,19 +115,25 @@ if ($watchId && $env === 'watchy') {
             }
         }
 
-        // Inject timezone GMT offset
+        // Inject POSIX timezone string (handles DST automatically)
         $tz = $watch['timezone'] ?? 'Europe/London';
-        try {
-            $dtz = new DateTimeZone($tz);
-            $now = new DateTime('now', $dtz);
-            $offsetSec = $dtz->getOffset($now);
-            $offsetHours = $offsetSec / 3600;
-        } catch (Exception $e) {
-            $offsetHours = 0;
+        $posixTz = 'GMT0';
+        $tzFile = '/usr/share/zoneinfo/' . str_replace('..', '', $tz);
+        if (file_exists($tzFile)) {
+            $data = file_get_contents($tzFile);
+            if (substr($data, 0, 4) === 'TZif') {
+                $lastNl = strrpos($data, "\n");
+                if ($lastNl !== false) {
+                    $prevNl = strrpos(substr($data, 0, $lastNl), "\n");
+                    if ($prevNl !== false) {
+                        $posixTz = trim(substr($data, $prevNl + 1, $lastNl - $prevNl - 1));
+                    }
+                }
+            }
         }
         $config = preg_replace(
-            '/#define\s+CRISPFACE_GMT_OFFSET\s+[^\n]+/',
-            '#define CRISPFACE_GMT_OFFSET ' . $offsetHours,
+            '/#define\s+CRISPFACE_POSIX_TZ\s+"[^"]*"/',
+            '#define CRISPFACE_POSIX_TZ "' . addslashes($posixTz) . '"',
             $config
         );
 

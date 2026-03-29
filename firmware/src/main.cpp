@@ -22,7 +22,7 @@ RTC_DATA_ATTR int  cfLastSyncTry  = 0;     // timestamp of last sync attempt (fo
 RTC_DATA_ATTR bool cfFaceChanging = false; // skip sync when cycling faces
 RTC_DATA_ATTR int  cfSyncFails    = 0;     // consecutive sync failures (for progressive backoff)
 RTC_DATA_ATTR int  cfLastWifiIdx  = -1;    // last successful WiFi network index (skip scan on reconnect)
-RTC_DATA_ATTR long cfUtcOffsetSec = (long)CRISPFACE_GMT_OFFSET * 3600; // DST-aware offset, updated from API
+RTC_DATA_ATTR char cfPosixTz[64]  = {};    // POSIX TZ string, updated from API (handles DST automatically)
 
 // ---- Alert system ----
 struct CfAlert {
@@ -88,7 +88,8 @@ public:
             tv.tv_sec = seedTime;
             tv.tv_usec = 0;
             settimeofday(&tv, NULL);
-            configTime(CRISPFACE_GMT_OFFSET * 3600, 0, "");
+            if (cfPosixTz[0] == '\0') strncpy(cfPosixTz, CRISPFACE_POSIX_TZ, sizeof(cfPosixTz) - 1);
+            configTzTime(cfPosixTz, "");
             RTC.read(currentTime);
             cfTimeSeeded = true;
         }
@@ -756,8 +757,9 @@ private:
         }
 
         // Start NTP in background (non-blocking) — runs while HTTP proceeds.
-        // cfUtcOffsetSec persists across deep sleep so DST corrections survive reboots.
-        configTime(cfUtcOffsetSec, 0, "pool.ntp.org");
+        // cfPosixTz encodes DST rules and persists across deep sleep; updated from API each sync.
+        if (cfPosixTz[0] == '\0') strncpy(cfPosixTz, CRISPFACE_POSIX_TZ, sizeof(cfPosixTz) - 1);
+        configTzTime(cfPosixTz, "pool.ntp.org");
 
         syncProgress(20);
 
@@ -812,18 +814,18 @@ private:
         String payload = http.getString();
         http.end();
 
-        // Apply server-supplied UTC offset (DST-aware) before syncing NTP.
-        // Use a filter so ArduinoJson skips the large faces array and reaches
-        // utc_offset without running out of memory. cfUtcOffsetSec is RTC_DATA_ATTR
-        // so the updated value survives deep sleep and is used on the next sync too.
+        // Cache POSIX TZ string from server for use on the NEXT sync.
+        // cfPosixTz is RTC_DATA_ATTR so it survives deep sleep.
+        // configTzTime was already called above with the current cfPosixTz — no
+        // second call needed; this just keeps the cached value up to date.
         {
             StaticJsonDocument<16> filter;
-            filter["utc_offset"] = true;
-            StaticJsonDocument<64> tzDoc;
+            filter["posix_tz"] = true;
+            StaticJsonDocument<96> tzDoc;
             deserializeJson(tzDoc, payload, DeserializationOption::Filter(filter));
-            if (tzDoc.containsKey("utc_offset")) {
-                cfUtcOffsetSec = tzDoc["utc_offset"].as<long>();
-                configTime(cfUtcOffsetSec, 0, "");
+            if (tzDoc.containsKey("posix_tz")) {
+                const char* newTz = tzDoc["posix_tz"] | "";
+                if (newTz[0] != '\0') strncpy(cfPosixTz, newTz, sizeof(cfPosixTz) - 1);
             }
         }
         cfSyncNTP();
