@@ -806,10 +806,33 @@ private:
 
         syncProgress(40);
 
-        // Get payload, sync time, then kill WiFi
+        // Get payload, set RTC from server local_time, then kill WiFi.
+        // Server knows the watch timezone and sends the correct local time directly —
+        // no NTP timezone arithmetic needed.
         String payload = http.getString();
         http.end();
-        cfSyncNTP();
+        {
+            StaticJsonDocument<16> filter;
+            filter["local_time"] = true;
+            StaticJsonDocument<128> ltDoc;
+            deserializeJson(ltDoc, payload, DeserializationOption::Filter(filter));
+            JsonObject lt = ltDoc["local_time"];
+            if (!lt.isNull()) {
+                tmElements_t tm;
+                tm.Year   = (int)(lt["Y"] | 1970) - 1970;
+                tm.Month  = lt["mo"] | 1;
+                tm.Day    = lt["d"]  | 1;
+                tm.Hour   = lt["h"]  | 0;
+                tm.Minute = lt["mi"] | 0;
+                tm.Second = lt["s"]  | 0;
+                tm.Wday   = lt["wd"] | 1;
+                RTC.set(tm);
+                RTC.read(currentTime);
+                cfTimeSeeded = true;
+            } else {
+                cfSyncNTP(); // fallback if server didn't include local_time
+            }
+        }
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
 
