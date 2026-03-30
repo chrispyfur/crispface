@@ -21,14 +21,6 @@ days_ahead = int(qs.get('days', ['1'])[0])
 detail = qs.get('detail', ['title'])[0]
 max_chars = int(qs.get('maxchars', ['20'])[0])
 use_dividers = qs.get('dividers', ['true'])[0].lower() == 'true'
-# Display timezone — all internal processing stays UTC, this only affects strftime output
-_display_tz = None
-_tz_param = qs.get('tz', [''])[0]
-if _tz_param and _ZoneInfo:
-    try:
-        _display_tz = _ZoneInfo(_tz_param)
-    except Exception:
-        pass
 
 if max_events < 1:
     max_events = 1
@@ -127,27 +119,36 @@ def _resolve_tzid(tzid):
     return None
 
 
-def parse_ics_datetime(val, tzid=None):
-    """Parse an ICS datetime value into a UTC datetime object.
-    If tzid is provided (e.g. 'Europe/London'), the value is interpreted
-    in that timezone and converted to UTC. Z-suffixed values are always UTC."""
+def parse_ics_datetime(val):
+    """Parse an ICS datetime value. The value is always stored as-is with UTC
+    label — this preserves local wall-clock time through recurrence arithmetic.
+    Actual UTC conversion happens only when needed (alert secFromNow)."""
     val = val.strip()
-    is_utc = val.endswith('Z')
-    if is_utc:
+    if val.endswith('Z'):
         val = val[:-1]
     try:
         if 'T' in val:
-            dt = datetime.strptime(val, '%Y%m%dT%H%M%S')
+            return datetime.strptime(val, '%Y%m%dT%H%M%S').replace(tzinfo=timezone.utc)
         else:
-            dt = datetime.strptime(val, '%Y%m%d')
-        if is_utc or not tzid:
-            return dt.replace(tzinfo=timezone.utc)
-        tz = _resolve_tzid(tzid)
-        if tz:
-            return dt.replace(tzinfo=tz).astimezone(timezone.utc)
-        return dt.replace(tzinfo=timezone.utc)
+            return datetime.strptime(val, '%Y%m%d').replace(tzinfo=timezone.utc)
     except ValueError:
         return None
+
+
+def _to_real_utc(dt, tzid):
+    """Convert a local-time-as-UTC datetime to actual UTC using the TZID.
+    Used only for alert secFromNow calculation where real UTC matters."""
+    if not tzid:
+        return dt
+    tz = _resolve_tzid(tzid)
+    if not tz:
+        return dt
+    # dt.hour/min/sec are actually local time values — reinterpret in the real tz
+    naive = dt.replace(tzinfo=None)
+    try:
+        return naive.replace(tzinfo=tz).astimezone(timezone.utc)
+    except Exception:
+        return dt
 
 
 def parse_ics_events(ics_text):
@@ -170,19 +171,17 @@ def parse_ics_events(ics_text):
             prop_part, _, value = line.partition(':')
             prop_name = prop_part.split(';')[0].upper()
 
-            # Extract TZID from property params (e.g. DTSTART;TZID=Europe/London)
-            tzid = None
-            for param in prop_part.split(';')[1:]:
-                if param.upper().startswith('TZID='):
-                    tzid = param[5:]
-                    break
-
             if prop_name == 'DTSTART':
-                event['dtstart'] = parse_ics_datetime(value, tzid)
+                event['dtstart'] = parse_ics_datetime(value)
                 if 'VALUE=DATE' in prop_part.upper():
                     event['all_day'] = True
+                # Store TZID for alert UTC conversion (not used for display/recurrence)
+                for param in prop_part.split(';')[1:]:
+                    if param.upper().startswith('TZID='):
+                        event['_tzid'] = param[5:]
+                        break
             elif prop_name == 'DTEND':
-                event['dtend'] = parse_ics_datetime(value, tzid)
+                event['dtend'] = parse_ics_datetime(value)
             elif prop_name == 'SUMMARY':
                 event['summary'] = value
             elif prop_name == 'LOCATION':
@@ -455,8 +454,7 @@ def format_events(events, detail, max_chars, dividers=True):
             is_free = ev.get('transp') == 'TRANSPARENT'
             prefix = '\x02' if is_free else '\x01'
         else:
-            dt_display = ev['dtstart'].astimezone(_display_tz) if _display_tz else ev['dtstart']
-            prefix = dt_display.strftime('%H:%M')
+            prefix = ev['dtstart'].strftime('%H:%M')
 
         line = '{} {}'.format(prefix, subject)
 
@@ -610,21 +608,25 @@ if any_alerts:
         if ev.get('all_day'):
             continue
         dt = ev.get('dtstart')
-        if not dt or dt <= now:
+        if not dt:
             continue
-        seconds_from_now = int((dt - now).total_seconds())
+        # Convert local-as-UTC to real UTC for correct secFromNow
+        dt_utc = _to_real_utc(dt, ev.get('_tzid'))
+        if dt_utc <= now:
+            continue
+        seconds_from_now = int((dt_utc - now).total_seconds())
         if seconds_from_now <= 0:
             continue
         title = ev.get('summary', 'Event')
         loc = ev.get('location', '')
         alert_text = title if not loc else '{}\n@ {}'.format(title, loc)
         feed_url = ev.get('_feed_url', '')
-        dt_iso = ev['dtstart'].isoformat() if ev.get('dtstart') else ''
+        dt_iso = dt.isoformat()
         uid = hashlib.md5((feed_url + '|' + dt_iso + '|' + title).encode()).hexdigest()[:16]
         alerts.append({
             'sec': seconds_from_now,
             'text': alert_text[:59],
-            'time': (dt.astimezone(_display_tz) if _display_tz else dt).strftime('%H:%M'),
+            'time': dt.strftime('%H:%M'),  # local wall-clock time (stored as-is)
             'ins': bool(ev.get('_insistent')),
             'uid': uid,
             'pre': ev.get('_alert_before', 5) * 60,
