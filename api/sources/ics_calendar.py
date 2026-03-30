@@ -4,6 +4,10 @@ Accepts ?feeds=JSON_ARRAY&events=N&days=N&detail=title|location|full
 Also accepts legacy ?url=ICS_URL for backwards compatibility."""
 import sys, os, json, time, urllib.request, urllib.parse, re, hashlib
 from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+except ImportError:
+    _ZoneInfo = None
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 from config import DATA_DIR
 
@@ -74,12 +78,6 @@ if not feeds:
 def unfold_ics(text):
     """Unfold long lines per RFC 5545 (continuation lines start with space/tab)."""
     return re.sub(r'\r?\n[ \t]', '', text)
-
-
-try:
-    from zoneinfo import ZoneInfo as _ZoneInfo
-except ImportError:
-    _ZoneInfo = None
 
 
 def parse_ics_datetime(val, tzid=None):
