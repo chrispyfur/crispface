@@ -80,6 +80,53 @@ def unfold_ics(text):
     return re.sub(r'\r?\n[ \t]', '', text)
 
 
+# Map Windows timezone names (Microsoft 365) to IANA
+_WINDOWS_TZ = {
+    'GMT Standard Time': 'Europe/London', 'UTC': 'UTC',
+    'W. Europe Standard Time': 'Europe/Berlin',
+    'Romance Standard Time': 'Europe/Paris',
+    'Central European Standard Time': 'Europe/Budapest',
+    'E. Europe Standard Time': 'Europe/Bucharest',
+    'Egypt Standard Time': 'Africa/Cairo',
+    'Eastern Standard Time': 'America/New_York',
+    'Central Standard Time': 'America/Chicago',
+    'Mountain Standard Time': 'America/Denver',
+    'Pacific Standard Time': 'America/Los_Angeles',
+    'AUS Eastern Standard Time': 'Australia/Sydney',
+    'Tokyo Standard Time': 'Asia/Tokyo',
+    'India Standard Time': 'Asia/Kolkata',
+    'China Standard Time': 'Asia/Shanghai',
+    'Singapore Standard Time': 'Asia/Singapore',
+    'Arabian Standard Time': 'Asia/Dubai',
+}
+
+
+def _resolve_tzid(tzid):
+    """Resolve a TZID string to a timezone object. Handles IANA names,
+    Windows names (Microsoft 365), and GMT+HHMM / GMT-HHMM offsets."""
+    if not tzid or not _ZoneInfo:
+        return None
+    # Try IANA name directly
+    try:
+        return _ZoneInfo(tzid)
+    except Exception:
+        pass
+    # Try Windows timezone mapping
+    mapped = _WINDOWS_TZ.get(tzid)
+    if mapped:
+        try:
+            return _ZoneInfo(mapped)
+        except Exception:
+            pass
+    # Try GMT+HHMM / GMT-HHMM offset format (e.g. GMT+0100)
+    m = re.match(r'^GMT([+-])(\d{2})(\d{2})$', tzid)
+    if m:
+        sign = 1 if m.group(1) == '+' else -1
+        offset = sign * (int(m.group(2)) * 3600 + int(m.group(3)) * 60)
+        return timezone(timedelta(seconds=offset))
+    return None
+
+
 def parse_ics_datetime(val, tzid=None):
     """Parse an ICS datetime value into a UTC datetime object.
     If tzid is provided (e.g. 'Europe/London'), the value is interpreted
@@ -93,12 +140,12 @@ def parse_ics_datetime(val, tzid=None):
             dt = datetime.strptime(val, '%Y%m%dT%H%M%S')
         else:
             dt = datetime.strptime(val, '%Y%m%d')
-        if is_utc or not tzid or not _ZoneInfo:
+        if is_utc or not tzid:
             return dt.replace(tzinfo=timezone.utc)
-        try:
-            return dt.replace(tzinfo=_ZoneInfo(tzid)).astimezone(timezone.utc)
-        except Exception:
-            return dt.replace(tzinfo=timezone.utc)
+        tz = _resolve_tzid(tzid)
+        if tz:
+            return dt.replace(tzinfo=tz).astimezone(timezone.utc)
+        return dt.replace(tzinfo=timezone.utc)
     except ValueError:
         return None
 
