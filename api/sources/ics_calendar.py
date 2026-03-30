@@ -17,6 +17,14 @@ days_ahead = int(qs.get('days', ['1'])[0])
 detail = qs.get('detail', ['title'])[0]
 max_chars = int(qs.get('maxchars', ['20'])[0])
 use_dividers = qs.get('dividers', ['true'])[0].lower() == 'true'
+# Display timezone — all internal processing stays UTC, this only affects strftime output
+_display_tz = None
+_tz_param = qs.get('tz', [''])[0]
+if _tz_param and _ZoneInfo:
+    try:
+        _display_tz = _ZoneInfo(_tz_param)
+    except Exception:
+        pass
 
 if max_events < 1:
     max_events = 1
@@ -402,7 +410,8 @@ def format_events(events, detail, max_chars, dividers=True):
             is_free = ev.get('transp') == 'TRANSPARENT'
             prefix = '\x02' if is_free else '\x01'
         else:
-            prefix = ev['dtstart'].strftime('%H:%M')
+            dt_display = ev['dtstart'].astimezone(_display_tz) if _display_tz else ev['dtstart']
+            prefix = dt_display.strftime('%H:%M')
 
         line = '{} {}'.format(prefix, subject)
 
@@ -570,7 +579,7 @@ if any_alerts:
         alerts.append({
             'sec': seconds_from_now,
             'text': alert_text[:59],
-            'time': dt.strftime('%H:%M'),
+            'time': (dt.astimezone(_display_tz) if _display_tz else dt).strftime('%H:%M'),
             'ins': bool(ev.get('_insistent')),
             'uid': uid,
             'pre': ev.get('_alert_before', 5) * 60,

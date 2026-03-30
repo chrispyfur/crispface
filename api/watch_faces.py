@@ -156,6 +156,10 @@ for face_id in face_ids:
         params = comp.get('params', {})
 
         if source and not is_local:
+            # Inject watch timezone so sources can format display times locally
+            watch_tz = watch.get('timezone', '')
+            if watch_tz and 'tz' not in params:
+                params = dict(params, tz=watch_tz)
             resolve_tasks.append((face_idx, comp_idx, source, params))
 
 # ---- Resolve all server-side sources in parallel ----

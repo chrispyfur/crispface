@@ -7,10 +7,21 @@ Any other character is treated as a literal."""
 import json, urllib.parse, os
 from datetime import datetime, timezone
 
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+except ImportError:
+    _ZoneInfo = None
+
 qs = urllib.parse.parse_qs(os.environ.get('QUERY_STRING', ''))
 fmt = qs.get('format', ['D j M'])[0]
 
 now = datetime.now(timezone.utc)
+tz_param = qs.get('tz', [''])[0]
+if tz_param and _ZoneInfo:
+    try:
+        now = now.astimezone(_ZoneInfo(tz_param))
+    except Exception:
+        pass
 
 # Translate PHP date chars to strftime directives
 PHP_TO_STRFTIME = {
