@@ -68,16 +68,31 @@ def unfold_ics(text):
     return re.sub(r'\r?\n[ \t]', '', text)
 
 
-def parse_ics_datetime(val):
-    """Parse an ICS datetime value into a UTC datetime object."""
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+except ImportError:
+    _ZoneInfo = None
+
+
+def parse_ics_datetime(val, tzid=None):
+    """Parse an ICS datetime value into a UTC datetime object.
+    If tzid is provided (e.g. 'Europe/London'), the value is interpreted
+    in that timezone and converted to UTC. Z-suffixed values are always UTC."""
     val = val.strip()
-    if val.endswith('Z'):
+    is_utc = val.endswith('Z')
+    if is_utc:
         val = val[:-1]
     try:
         if 'T' in val:
-            return datetime.strptime(val, '%Y%m%dT%H%M%S').replace(tzinfo=timezone.utc)
+            dt = datetime.strptime(val, '%Y%m%dT%H%M%S')
         else:
-            return datetime.strptime(val, '%Y%m%d').replace(tzinfo=timezone.utc)
+            dt = datetime.strptime(val, '%Y%m%d')
+        if is_utc or not tzid or not _ZoneInfo:
+            return dt.replace(tzinfo=timezone.utc)
+        try:
+            return dt.replace(tzinfo=_ZoneInfo(tzid)).astimezone(timezone.utc)
+        except Exception:
+            return dt.replace(tzinfo=timezone.utc)
     except ValueError:
         return None
 
@@ -102,12 +117,19 @@ def parse_ics_events(ics_text):
             prop_part, _, value = line.partition(':')
             prop_name = prop_part.split(';')[0].upper()
 
+            # Extract TZID from property params (e.g. DTSTART;TZID=Europe/London)
+            tzid = None
+            for param in prop_part.split(';')[1:]:
+                if param.upper().startswith('TZID='):
+                    tzid = param[5:]
+                    break
+
             if prop_name == 'DTSTART':
-                event['dtstart'] = parse_ics_datetime(value)
+                event['dtstart'] = parse_ics_datetime(value, tzid)
                 if 'VALUE=DATE' in prop_part.upper():
                     event['all_day'] = True
             elif prop_name == 'DTEND':
-                event['dtend'] = parse_ics_datetime(value)
+                event['dtend'] = parse_ics_datetime(value, tzid)
             elif prop_name == 'SUMMARY':
                 event['summary'] = value
             elif prop_name == 'LOCATION':
